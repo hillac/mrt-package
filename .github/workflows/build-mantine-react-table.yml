@@ -1,0 +1,494 @@
+name: Build Mantine React Table
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: build-mantine-react-table
+  cancel-in-progress: false
+
+env:
+  UPSTREAM_REPOSITORY: TanStack/table
+  UPSTREAM_REF: beta
+  UPSTREAM_PATH: examples/react/mantine-react-table
+  OUTPUT_BRANCH: package
+  PACKAGE_NAME: mantine-react-table
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out this repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Check out TanStack Table
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ env.UPSTREAM_REPOSITORY }}
+          ref: ${{ env.UPSTREAM_REF }}
+          path: upstream
+          fetch-depth: 1
+          sparse-checkout-cone-mode: false
+          sparse-checkout: |
+            examples/react/mantine-react-table/src/mantine-react-table
+            examples/react/mantine-react-table/package.json
+            LICENSE
+
+      - name: Read upstream revision
+        id: upstream
+        working-directory: upstream
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+          echo "short_sha=$(git rev-parse --short=12 HEAD)" >> "$GITHUB_OUTPUT"
+
+      - name: Copy package source
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          rm -rf generated
+          mkdir -p generated/src
+
+          cp -R \
+            "upstream/${UPSTREAM_PATH}/src/mantine-react-table/." \
+            generated/src/
+
+          cp upstream/LICENSE generated/LICENSE
+
+      - name: Generate package.json
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          UPSTREAM_PACKAGE="upstream/${UPSTREAM_PATH}/package.json"
+
+          get_version() {
+            jq -er --arg name "$1" '
+              .dependencies[$name]
+              // .devDependencies[$name]
+              // error("Missing upstream dependency: " + $name)
+            ' "$UPSTREAM_PACKAGE"
+          }
+
+          MANTINE_CORE_VERSION="$(get_version '@mantine/core')"
+          MANTINE_DATES_VERSION="$(get_version '@mantine/dates')"
+          MANTINE_HOOKS_VERSION="$(get_version '@mantine/hooks')"
+          TABLER_ICONS_VERSION="$(get_version '@tabler/icons-react')"
+
+          MATCH_SORTER_VERSION="$(get_version '@tanstack/match-sorter-utils')"
+          REACT_STORE_VERSION="$(get_version '@tanstack/react-store')"
+          REACT_TABLE_VERSION="$(get_version '@tanstack/react-table')"
+          REACT_VIRTUAL_VERSION="$(get_version '@tanstack/react-virtual')"
+
+          CLSX_VERSION="$(get_version 'clsx')"
+          DAYJS_VERSION="$(get_version 'dayjs')"
+
+          REACT_VERSION="$(get_version 'react')"
+          REACT_DOM_VERSION="$(get_version 'react-dom')"
+          TYPES_REACT_VERSION="$(get_version '@types/react')"
+          TYPES_REACT_DOM_VERSION="$(get_version '@types/react-dom')"
+          TYPESCRIPT_VERSION="$(get_version 'typescript')"
+
+          jq -n \
+            --arg name "$PACKAGE_NAME" \
+            --arg repository "$GITHUB_REPOSITORY" \
+            --arg upstreamSha "${{ steps.upstream.outputs.sha }}" \
+            --arg mantineCore "$MANTINE_CORE_VERSION" \
+            --arg mantineDates "$MANTINE_DATES_VERSION" \
+            --arg mantineHooks "$MANTINE_HOOKS_VERSION" \
+            --arg tablerIcons "$TABLER_ICONS_VERSION" \
+            --arg matchSorter "$MATCH_SORTER_VERSION" \
+            --arg reactStore "$REACT_STORE_VERSION" \
+            --arg reactTable "$REACT_TABLE_VERSION" \
+            --arg reactVirtual "$REACT_VIRTUAL_VERSION" \
+            --arg clsx "$CLSX_VERSION" \
+            --arg dayjs "$DAYJS_VERSION" \
+            --arg react "$REACT_VERSION" \
+            --arg reactDom "$REACT_DOM_VERSION" \
+            --arg typesReact "$TYPES_REACT_VERSION" \
+            --arg typesReactDom "$TYPES_REACT_DOM_VERSION" \
+            --arg typescript "$TYPESCRIPT_VERSION" \
+            '{
+              name: $name,
+              version: "0.0.0",
+              description: "Mantine React Table built from the TanStack Table beta example",
+              license: "MIT",
+              type: "module",
+              sideEffects: [
+                "*.css"
+              ],
+              main: "./dist/index.js",
+              module: "./dist/index.js",
+              types: "./dist/index.d.ts",
+              exports: {
+                ".": {
+                  types: "./dist/index.d.ts",
+                  import: "./dist/index.js"
+                },
+                "./styles.css": "./styles.css"
+              },
+              files: [
+                "dist",
+                "styles.css",
+                "LICENSE",
+                "README.md",
+                "UPSTREAM.md"
+              ],
+              scripts: {
+                clean: "rimraf dist styles.css",
+                build: "rollup --config rollup.config.mjs",
+                typecheck: "tsc --noEmit"
+              },
+              peerDependencies: {
+                "@mantine/core": $mantineCore,
+                "@mantine/dates": $mantineDates,
+                "@mantine/hooks": $mantineHooks,
+                "@tabler/icons-react": $tablerIcons,
+                clsx: $clsx,
+                dayjs: $dayjs,
+                react: $react,
+                "react-dom": $reactDom
+              },
+              dependencies: {
+                "@tanstack/match-sorter-utils": $matchSorter,
+                "@tanstack/react-store": $reactStore,
+                "@tanstack/react-table": $reactTable,
+                "@tanstack/react-virtual": $reactVirtual
+              },
+              devDependencies: {
+                "@mantine/core": $mantineCore,
+                "@mantine/dates": $mantineDates,
+                "@mantine/hooks": $mantineHooks,
+                "@rollup/plugin-typescript": "^12.1.4",
+                "@tabler/icons-react": $tablerIcons,
+                "@types/react": $typesReact,
+                "@types/react-dom": $typesReactDom,
+                clsx: $clsx,
+                dayjs: $dayjs,
+                react: $react,
+                "react-dom": $reactDom,
+                rimraf: "^6.0.1",
+                rollup: "^4.46.2",
+                "rollup-plugin-copy": "^3.5.0",
+                "rollup-plugin-delete": "^3.0.1",
+                "rollup-plugin-dts": "^6.2.1",
+                "rollup-plugin-peer-deps-external": "^2.2.4",
+                "rollup-plugin-postcss": "^4.0.2",
+                tslib: "^2.8.1",
+                typescript: $typescript
+              },
+              repository: {
+                type: "git",
+                url: ("https://github.com/" + $repository + ".git")
+              },
+              xUpstreamRevision: $upstreamSha
+            }' > generated/package.json
+
+      - name: Generate TypeScript configuration
+        shell: bash
+        run: |
+          cat > generated/tsconfig.json <<'EOF'
+          {
+            "compilerOptions": {
+              "target": "ES2022",
+              "lib": [
+                "ES2022",
+                "DOM",
+                "DOM.Iterable"
+              ],
+              "module": "ESNext",
+              "moduleResolution": "Bundler",
+              "jsx": "react-jsx",
+              "strict": true,
+              "skipLibCheck": true,
+              "esModuleInterop": true,
+              "allowSyntheticDefaultImports": true,
+              "resolveJsonModule": true,
+              "isolatedModules": true,
+              "declaration": true,
+              "declarationDir": "./dist/types",
+              "declarationMap": false,
+              "sourceMap": true
+            },
+            "include": [
+              "src"
+            ]
+          }
+          EOF
+
+      - name: Generate Rollup configuration
+        shell: bash
+        run: |
+          cat > generated/rollup.config.mjs <<'EOF'
+          import typescript from '@rollup/plugin-typescript'
+          import copy from 'rollup-plugin-copy'
+          import del from 'rollup-plugin-delete'
+          import dts from 'rollup-plugin-dts'
+          import peerDepsExternal from 'rollup-plugin-peer-deps-external'
+          import postcss from 'rollup-plugin-postcss'
+
+          const external = [
+            '@mantine/core',
+            '@mantine/dates',
+            '@mantine/hooks',
+            '@tabler/icons-react',
+
+            '@tanstack/match-sorter-utils',
+            '@tanstack/react-store',
+            '@tanstack/react-table',
+            '@tanstack/react-virtual',
+
+            'clsx',
+            'dayjs',
+            'react',
+            'react-dom',
+            'react/jsx-runtime',
+          ]
+
+          export default [
+            {
+              input: './src/index.ts',
+
+              external,
+
+              output: {
+                file: './dist/index.js',
+                format: 'esm',
+                sourcemap: true,
+              },
+
+              plugins: [
+                peerDepsExternal(),
+
+                typescript({
+                  rootDir: './src',
+                  declaration: true,
+                  declarationDir: './dist/types',
+                  sourceMap: true,
+                }),
+
+                postcss({
+                  extract: true,
+                  minimize: false,
+                  modules: true,
+                }),
+              ],
+            },
+
+            {
+              input: './dist/types/index.d.ts',
+
+              external,
+
+              output: {
+                file: './dist/index.d.ts',
+                format: 'esm',
+              },
+
+              plugins: [
+                copy({
+                  hook: 'buildStart',
+                  targets: [
+                    {
+                      src: './dist/index.css',
+                      dest: './',
+                      rename: 'styles.css',
+                    },
+                  ],
+                }),
+
+                dts(),
+
+                del({
+                  hook: 'buildEnd',
+                  targets: [
+                    './dist/index.css',
+                    './dist/types',
+                  ],
+                }),
+              ],
+            },
+          ]
+          EOF
+
+      - name: Generate documentation
+        shell: bash
+        run: |
+          cat > generated/README.md <<'EOF'
+          # Mantine React Table
+
+          This package is automatically built from the reusable Mantine React
+          Table implementation in the TanStack Table beta examples.
+
+          It does not contain the example application, example tables, Faker
+          data, Vite configuration, or tests.
+
+          ## Installation
+
+          Install the generated `package` branch:
+
+          ```json
+          {
+            "dependencies": {
+              "mantine-react-table": "github:OWNER/REPOSITORY#package"
+            }
+          }
+          ```
+
+          ## Usage
+
+          ```tsx
+          import {
+            MantineReactTable,
+            createMRTColumnHelper,
+            useMantineReactTable,
+          } from 'mantine-react-table'
+
+          import 'mantine-react-table/styles.css'
+          ```
+
+          Your application must also load the Mantine styles:
+
+          ```tsx
+          import '@mantine/core/styles.css'
+          import '@mantine/dates/styles.css'
+          ```
+          EOF
+
+          cat > generated/UPSTREAM.md <<EOF
+          # Upstream source
+
+          - Repository: https://github.com/${UPSTREAM_REPOSITORY}
+          - Ref: \`${UPSTREAM_REF}\`
+          - Source directory: \`${UPSTREAM_PATH}/src/mantine-react-table\`
+          - Commit: \`${{ steps.upstream.outputs.sha }}\`
+
+          Only the reusable Mantine React Table implementation is copied.
+
+          The example entry point, example tables, Faker data, Vite
+          configuration, and tests are excluded.
+          EOF
+
+          cat > generated/.gitignore <<'EOF'
+          node_modules/
+          *.tgz
+          EOF
+
+      - name: Install dependencies
+        working-directory: generated
+        shell: bash
+        run: npm install --ignore-scripts
+
+      - name: Type-check
+        working-directory: generated
+        shell: bash
+        run: npm run typecheck
+
+      - name: Build
+        working-directory: generated
+        shell: bash
+        run: npm run build
+
+      - name: Validate output
+        working-directory: generated
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          test -f dist/index.js
+          test -f dist/index.js.map
+          test -f dist/index.d.ts
+
+          if find src -type f -name '*.css' | grep -q .; then
+            test -f styles.css
+          fi
+
+          npm pack --dry-run
+
+      - name: Prepare package branch contents
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          rm -rf publish
+          mkdir -p publish
+
+          cp -R generated/dist publish/dist
+
+          if [[ -f generated/styles.css ]]; then
+            cp generated/styles.css publish/styles.css
+          fi
+
+          cp generated/package.json publish/package.json
+          cp generated/package-lock.json publish/package-lock.json
+          cp generated/LICENSE publish/LICENSE
+          cp generated/README.md publish/README.md
+          cp generated/UPSTREAM.md publish/UPSTREAM.md
+          cp generated/.gitignore publish/.gitignore
+
+      - name: Push package branch
+        shell: bash
+        env:
+          UPSTREAM_SHA: ${{ steps.upstream.outputs.sha }}
+          UPSTREAM_SHORT_SHA: ${{ steps.upstream.outputs.short_sha }}
+        run: |
+          set -euo pipefail
+
+          git config user.name "github-actions[bot]"
+          git config user.email \
+            "41898282+github-actions[bot]@users.noreply.github.com"
+
+          git fetch origin "$OUTPUT_BRANCH" || true
+
+          rm -rf package-worktree
+
+          if git show-ref \
+            --verify \
+            --quiet \
+            "refs/remotes/origin/$OUTPUT_BRANCH"
+          then
+            git worktree add \
+              --detach \
+              package-worktree \
+              "origin/$OUTPUT_BRANCH"
+          else
+            git worktree add --detach package-worktree
+
+            (
+              cd package-worktree
+              git checkout --orphan "$OUTPUT_BRANCH"
+              git rm -rf . >/dev/null 2>&1 || true
+            )
+          fi
+
+          find package-worktree \
+            -mindepth 1 \
+            -maxdepth 1 \
+            ! -name .git \
+            -exec rm -rf {} +
+
+          cp -R publish/. package-worktree/
+
+          cd package-worktree
+
+          git add --all
+
+          if git diff --cached --quiet; then
+            echo "No generated package changes."
+            exit 0
+          fi
+
+          git commit \
+            -m "Build Mantine React Table ${UPSTREAM_SHORT_SHA}" \
+            -m "Upstream-Commit: ${UPSTREAM_SHA}"
+
+          git push origin "HEAD:${OUTPUT_BRANCH}" --force
