@@ -1,31 +1,44 @@
-name: Build Mantine React Table
+name: Publish Mantine React Table
 
 on:
   workflow_dispatch:
+    inputs:
+      version:
+        description: npm package version, for example 0.1.0
+        required: true
+        type: string
+      npm_tag:
+        description: npm distribution tag
+        required: true
+        default: beta
+        type: choice
+        options:
+          - beta
+          - next
+          - latest
 
 permissions:
-  contents: write
+  contents: read
+  id-token: write
 
 concurrency:
-  group: build-mantine-react-table
+  group: publish-mantine-react-table
   cancel-in-progress: false
 
 env:
   UPSTREAM_REPOSITORY: TanStack/table
   UPSTREAM_REF: beta
   UPSTREAM_PATH: examples/react/mantine-react-table
-  OUTPUT_BRANCH: package
-  PACKAGE_NAME: mantine-react-table
+
+  PACKAGE_NAME: '@hillac/mantine-react-table'
 
 jobs:
-  build:
+  publish:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Check out this repository
+      - name: Check out publisher repository
         uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
 
       - name: Check out TanStack Table
         uses: actions/checkout@v4
@@ -40,6 +53,16 @@ jobs:
             examples/react/mantine-react-table/package.json
             LICENSE
 
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22.14.0
+          registry-url: https://registry.npmjs.org
+
+      - name: Update npm
+        shell: bash
+        run: npm install --global npm@latest
+
       - name: Read upstream revision
         id: upstream
         working-directory: upstream
@@ -50,7 +73,42 @@ jobs:
           echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
           echo "short_sha=$(git rev-parse --short=12 HEAD)" >> "$GITHUB_OUTPUT"
 
-      - name: Copy package source
+      - name: Validate requested version
+        shell: bash
+        env:
+          PACKAGE_VERSION: ${{ inputs.version }}
+        run: |
+          set -euo pipefail
+
+          NORMALIZED_VERSION="$(
+            node -e "
+              const semver = process.argv[1];
+
+              if (!/^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$/.test(semver)) {
+                console.error('Invalid semantic version: ' + semver);
+                process.exit(1);
+              }
+
+              process.stdout.write(semver);
+            " "$PACKAGE_VERSION"
+          )"
+
+          echo "PACKAGE_VERSION=$NORMALIZED_VERSION" >> "$GITHUB_ENV"
+
+      - name: Check whether version already exists
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          if npm view "${PACKAGE_NAME}@${PACKAGE_VERSION}" version \
+            --registry=https://registry.npmjs.org \
+            >/dev/null 2>&1
+          then
+            echo "::error::${PACKAGE_NAME}@${PACKAGE_VERSION} already exists on npm."
+            exit 1
+          fi
+
+      - name: Copy reusable source
         shell: bash
         run: |
           set -euo pipefail
@@ -66,6 +124,8 @@ jobs:
 
       - name: Generate package.json
         shell: bash
+        env:
+          UPSTREAM_SHA: ${{ steps.upstream.outputs.sha }}
         run: |
           set -euo pipefail
 
@@ -100,8 +160,9 @@ jobs:
 
           jq -n \
             --arg name "$PACKAGE_NAME" \
+            --arg version "$PACKAGE_VERSION" \
             --arg repository "$GITHUB_REPOSITORY" \
-            --arg upstreamSha "${{ steps.upstream.outputs.sha }}" \
+            --arg upstreamSha "$UPSTREAM_SHA" \
             --arg mantineCore "$MANTINE_CORE_VERSION" \
             --arg mantineDates "$MANTINE_DATES_VERSION" \
             --arg mantineHooks "$MANTINE_HOOKS_VERSION" \
@@ -119,8 +180,8 @@ jobs:
             --arg typescript "$TYPESCRIPT_VERSION" \
             '{
               name: $name,
-              version: "0.0.0",
-              description: "Mantine React Table built from the TanStack Table beta example",
+              version: $version,
+              description: "Mantine React Table built from the TanStack Table example",
               license: "MIT",
               type: "module",
               sideEffects: [
@@ -147,6 +208,10 @@ jobs:
                 clean: "rimraf dist styles.css",
                 build: "rollup --config rollup.config.mjs",
                 typecheck: "tsc --noEmit"
+              },
+              publishConfig: {
+                access: "public",
+                registry: "https://registry.npmjs.org"
               },
               peerDependencies: {
                 "@mantine/core": $mantineCore,
@@ -188,8 +253,12 @@ jobs:
               },
               repository: {
                 type: "git",
-                url: ("https://github.com/" + $repository + ".git")
+                url: ("git+https://github.com/" + $repository + ".git")
               },
+              bugs: {
+                url: ("https://github.com/" + $repository + "/issues")
+              },
+              homepage: ("https://github.com/" + $repository + "#readme"),
               xUpstreamRevision: $upstreamSha
             }' > generated/package.json
 
@@ -320,48 +389,44 @@ jobs:
           ]
           EOF
 
-      - name: Generate documentation
+      - name: Generate package documentation
         shell: bash
+        env:
+          UPSTREAM_SHA: ${{ steps.upstream.outputs.sha }}
         run: |
-          cat > generated/README.md <<'EOF'
-          # Mantine React Table
+          cat > generated/README.md <<EOF
+          # ${PACKAGE_NAME}
 
-          This package is automatically built from the reusable Mantine React
-          Table implementation in the TanStack Table beta examples.
+          An ESM-only build of the reusable Mantine React Table implementation
+          from the TanStack Table beta examples.
 
-          It does not contain the example application, example tables, Faker
-          data, Vite configuration, or tests.
+          The example application, Faker data, example tables, Vite
+          configuration, and tests are not included.
 
           ## Installation
 
-          Install the generated `package` branch:
-
-          ```json
-          {
-            "dependencies": {
-              "mantine-react-table": "github:OWNER/REPOSITORY#package"
-            }
-          }
-          ```
+          \`\`\`bash
+          npm install ${PACKAGE_NAME}
+          \`\`\`
 
           ## Usage
 
-          ```tsx
+          \`\`\`tsx
           import {
             MantineReactTable,
             createMRTColumnHelper,
             useMantineReactTable,
-          } from 'mantine-react-table'
+          } from '${PACKAGE_NAME}'
 
-          import 'mantine-react-table/styles.css'
-          ```
+          import '${PACKAGE_NAME}/styles.css'
+          \`\`\`
 
-          Your application must also load the Mantine styles:
+          Applications must also load Mantine's normal styles:
 
-          ```tsx
+          \`\`\`tsx
           import '@mantine/core/styles.css'
           import '@mantine/dates/styles.css'
-          ```
+          \`\`\`
           EOF
 
           cat > generated/UPSTREAM.md <<EOF
@@ -369,18 +434,10 @@ jobs:
 
           - Repository: https://github.com/${UPSTREAM_REPOSITORY}
           - Ref: \`${UPSTREAM_REF}\`
-          - Source directory: \`${UPSTREAM_PATH}/src/mantine-react-table\`
-          - Commit: \`${{ steps.upstream.outputs.sha }}\`
+          - Source: \`${UPSTREAM_PATH}/src/mantine-react-table\`
+          - Commit: \`${UPSTREAM_SHA}\`
 
-          Only the reusable Mantine React Table implementation is copied.
-
-          The example entry point, example tables, Faker data, Vite
-          configuration, and tests are excluded.
-          EOF
-
-          cat > generated/.gitignore <<'EOF'
-          node_modules/
-          *.tgz
+          Only the reusable Mantine React Table implementation is included.
           EOF
 
       - name: Install dependencies
@@ -398,7 +455,7 @@ jobs:
         shell: bash
         run: npm run build
 
-      - name: Validate output
+      - name: Validate package
         working-directory: generated
         shell: bash
         run: |
@@ -414,81 +471,13 @@ jobs:
 
           npm pack --dry-run
 
-      - name: Prepare package branch contents
-        shell: bash
-        run: |
-          set -euo pipefail
-
-          rm -rf publish
-          mkdir -p publish
-
-          cp -R generated/dist publish/dist
-
-          if [[ -f generated/styles.css ]]; then
-            cp generated/styles.css publish/styles.css
-          fi
-
-          cp generated/package.json publish/package.json
-          cp generated/package-lock.json publish/package-lock.json
-          cp generated/LICENSE publish/LICENSE
-          cp generated/README.md publish/README.md
-          cp generated/UPSTREAM.md publish/UPSTREAM.md
-          cp generated/.gitignore publish/.gitignore
-
-      - name: Push package branch
+      - name: Publish to npm
+        working-directory: generated
         shell: bash
         env:
-          UPSTREAM_SHA: ${{ steps.upstream.outputs.sha }}
-          UPSTREAM_SHORT_SHA: ${{ steps.upstream.outputs.short_sha }}
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
         run: |
-          set -euo pipefail
-
-          git config user.name "github-actions[bot]"
-          git config user.email \
-            "41898282+github-actions[bot]@users.noreply.github.com"
-
-          git fetch origin "$OUTPUT_BRANCH" || true
-
-          rm -rf package-worktree
-
-          if git show-ref \
-            --verify \
-            --quiet \
-            "refs/remotes/origin/$OUTPUT_BRANCH"
-          then
-            git worktree add \
-              --detach \
-              package-worktree \
-              "origin/$OUTPUT_BRANCH"
-          else
-            git worktree add --detach package-worktree
-
-            (
-              cd package-worktree
-              git checkout --orphan "$OUTPUT_BRANCH"
-              git rm -rf . >/dev/null 2>&1 || true
-            )
-          fi
-
-          find package-worktree \
-            -mindepth 1 \
-            -maxdepth 1 \
-            ! -name .git \
-            -exec rm -rf {} +
-
-          cp -R publish/. package-worktree/
-
-          cd package-worktree
-
-          git add --all
-
-          if git diff --cached --quiet; then
-            echo "No generated package changes."
-            exit 0
-          fi
-
-          git commit \
-            -m "Build Mantine React Table ${UPSTREAM_SHORT_SHA}" \
-            -m "Upstream-Commit: ${UPSTREAM_SHA}"
-
-          git push origin "HEAD:${OUTPUT_BRANCH}" --force
+          npm publish \
+            --access public \
+            --tag "${{ inputs.npm_tag }}" \
+            --provenance
