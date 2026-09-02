@@ -1,0 +1,15 @@
+diff --git a/examples/react/mantine-react-table/src/mantine-react-table/hooks/useMRT_TableInstance.ts b/examples/react/mantine-react-table/src/mantine-react-table/hooks/useMRT_TableInstance.ts
+--- a/examples/react/mantine-react-table/src/mantine-react-table/hooks/useMRT_TableInstance.ts
++++ b/examples/react/mantine-react-table/src/mantine-react-table/hooks/useMRT_TableInstance.ts
+@@ -375,6 +375,11 @@ export const useMRT_TableInstance = <TData extends MRT_RowData>(
+     hoveredColumn,
+     hoveredRow,
+     isFullScreen,
++    isLoading: statefulTableOptions.state.isLoading,
++    isSaving: statefulTableOptions.state.isSaving,
++    showLoadingOverlay: statefulTableOptions.state.showLoadingOverlay,
++    showProgressBars: statefulTableOptions.state.showProgressBars,
++    showSkeletons: statefulTableOptions.state.showSkeletons,
+     showAlertBanner,
+     showColumnFilters,
+     showGlobalFilter,
