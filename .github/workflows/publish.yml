@@ -29,7 +29,6 @@ env:
   UPSTREAM_REPOSITORY: TanStack/table
   UPSTREAM_REF: beta
   UPSTREAM_PATH: examples/react/mantine-react-table
-
   PACKAGE_NAME: '@hillac/mantine-react-table'
 
 jobs:
@@ -60,46 +59,28 @@ jobs:
           registry-url: https://registry.npmjs.org
 
       - name: Update npm
-        shell: bash
         run: npm install --global npm@latest
 
       - name: Read upstream revision
         id: upstream
         working-directory: upstream
-        shell: bash
         run: |
-          set -euo pipefail
-
           echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
           echo "short_sha=$(git rev-parse --short=12 HEAD)" >> "$GITHUB_OUTPUT"
 
       - name: Validate requested version
-        shell: bash
         env:
-          PACKAGE_VERSION: ${{ inputs.version }}
+          REQUESTED_VERSION: ${{ inputs.version }}
         run: |
-          set -euo pipefail
+          if ! grep -Eq '^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-[0-9A-Za-z.-]+)?(\+[0-9A-Za-z.-]+)?$' <<< "$REQUESTED_VERSION"; then
+            echo "::error::Invalid semantic version: $REQUESTED_VERSION"
+            exit 1
+          fi
 
-          NORMALIZED_VERSION="$(
-            node -e "
-              const semver = process.argv[1];
-
-              if (!/^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$/.test(semver)) {
-                console.error('Invalid semantic version: ' + semver);
-                process.exit(1);
-              }
-
-              process.stdout.write(semver);
-            " "$PACKAGE_VERSION"
-          )"
-
-          echo "PACKAGE_VERSION=$NORMALIZED_VERSION" >> "$GITHUB_ENV"
+          echo "PACKAGE_VERSION=$REQUESTED_VERSION" >> "$GITHUB_ENV"
 
       - name: Check whether version already exists
-        shell: bash
         run: |
-          set -euo pipefail
-
           if npm view "${PACKAGE_NAME}@${PACKAGE_VERSION}" version \
             --registry=https://registry.npmjs.org \
             >/dev/null 2>&1
@@ -108,376 +89,36 @@ jobs:
             exit 1
           fi
 
-      - name: Copy reusable source
-        shell: bash
-        run: |
-          set -euo pipefail
+      - name: Prepare package source and configuration
+        run: ./scripts/prepare-source.sh
 
-          rm -rf generated
-          mkdir -p generated/src
-
-          cp -R \
-            "upstream/${UPSTREAM_PATH}/src/mantine-react-table/." \
-            generated/src/
-
-          cp upstream/LICENSE generated/LICENSE
-
-      - name: Generate package.json
-        shell: bash
+      - name: Generate package metadata and documentation
         env:
           UPSTREAM_SHA: ${{ steps.upstream.outputs.sha }}
-        run: |
-          set -euo pipefail
-
-          UPSTREAM_PACKAGE="upstream/${UPSTREAM_PATH}/package.json"
-
-          get_version() {
-            jq -er --arg name "$1" '
-              .dependencies[$name]
-              // .devDependencies[$name]
-              // error("Missing upstream dependency: " + $name)
-            ' "$UPSTREAM_PACKAGE"
-          }
-
-          MANTINE_CORE_VERSION="$(get_version '@mantine/core')"
-          MANTINE_DATES_VERSION="$(get_version '@mantine/dates')"
-          MANTINE_HOOKS_VERSION="$(get_version '@mantine/hooks')"
-          TABLER_ICONS_VERSION="$(get_version '@tabler/icons-react')"
-
-          MATCH_SORTER_VERSION="$(get_version '@tanstack/match-sorter-utils')"
-          REACT_STORE_VERSION="$(get_version '@tanstack/react-store')"
-          REACT_TABLE_VERSION="$(get_version '@tanstack/react-table')"
-          REACT_VIRTUAL_VERSION="$(get_version '@tanstack/react-virtual')"
-
-          CLSX_VERSION="$(get_version 'clsx')"
-          DAYJS_VERSION="$(get_version 'dayjs')"
-
-          REACT_VERSION="$(get_version 'react')"
-          REACT_DOM_VERSION="$(get_version 'react-dom')"
-          TYPES_REACT_VERSION="$(get_version '@types/react')"
-          TYPES_REACT_DOM_VERSION="$(get_version '@types/react-dom')"
-          TYPESCRIPT_VERSION="$(get_version 'typescript')"
-
-          jq -n \
-            --arg name "$PACKAGE_NAME" \
-            --arg version "$PACKAGE_VERSION" \
-            --arg repository "$GITHUB_REPOSITORY" \
-            --arg upstreamSha "$UPSTREAM_SHA" \
-            --arg mantineCore "$MANTINE_CORE_VERSION" \
-            --arg mantineDates "$MANTINE_DATES_VERSION" \
-            --arg mantineHooks "$MANTINE_HOOKS_VERSION" \
-            --arg tablerIcons "$TABLER_ICONS_VERSION" \
-            --arg matchSorter "$MATCH_SORTER_VERSION" \
-            --arg reactStore "$REACT_STORE_VERSION" \
-            --arg reactTable "$REACT_TABLE_VERSION" \
-            --arg reactVirtual "$REACT_VIRTUAL_VERSION" \
-            --arg clsx "$CLSX_VERSION" \
-            --arg dayjs "$DAYJS_VERSION" \
-            --arg react "$REACT_VERSION" \
-            --arg reactDom "$REACT_DOM_VERSION" \
-            --arg typesReact "$TYPES_REACT_VERSION" \
-            --arg typesReactDom "$TYPES_REACT_DOM_VERSION" \
-            --arg typescript "$TYPESCRIPT_VERSION" \
-            '{
-              name: $name,
-              version: $version,
-              description: "Mantine React Table built from the TanStack Table example",
-              license: "MIT",
-              type: "module",
-              sideEffects: [
-                "*.css"
-              ],
-              main: "./dist/index.js",
-              module: "./dist/index.js",
-              types: "./dist/index.d.ts",
-              exports: {
-                ".": {
-                  types: "./dist/index.d.ts",
-                  import: "./dist/index.js"
-                },
-                "./styles.css": "./styles.css"
-              },
-              files: [
-                "dist",
-                "styles.css",
-                "LICENSE",
-                "README.md",
-                "UPSTREAM.md"
-              ],
-              scripts: {
-                clean: "rimraf dist styles.css",
-                build: "rollup --config rollup.config.mjs",
-                typecheck: "tsc --noEmit"
-              },
-              publishConfig: {
-                access: "public",
-                registry: "https://registry.npmjs.org"
-              },
-              peerDependencies: {
-                "@mantine/core": $mantineCore,
-                "@mantine/dates": $mantineDates,
-                "@mantine/hooks": $mantineHooks,
-                "@tabler/icons-react": $tablerIcons,
-                clsx: $clsx,
-                dayjs: $dayjs,
-                react: $react,
-                "react-dom": $reactDom
-              },
-              dependencies: {
-                "@tanstack/match-sorter-utils": $matchSorter,
-                "@tanstack/react-store": $reactStore,
-                "@tanstack/react-table": $reactTable,
-                "@tanstack/react-virtual": $reactVirtual
-              },
-              devDependencies: {
-                "@mantine/core": $mantineCore,
-                "@mantine/dates": $mantineDates,
-                "@mantine/hooks": $mantineHooks,
-                "@rollup/plugin-typescript": "^12.1.4",
-                "@tabler/icons-react": $tablerIcons,
-                "@types/react": $typesReact,
-                "@types/react-dom": $typesReactDom,
-                clsx: $clsx,
-                dayjs: $dayjs,
-                react: $react,
-                "react-dom": $reactDom,
-                rimraf: "^6.0.1",
-                rollup: "^4.46.2",
-                "rollup-plugin-copy": "^3.5.0",
-                "rollup-plugin-delete": "^3.0.1",
-                "rollup-plugin-dts": "^6.2.1",
-                "rollup-plugin-peer-deps-external": "^2.2.4",
-                "rollup-plugin-postcss": "^4.0.2",
-                tslib: "^2.8.1",
-                typescript: $typescript
-              },
-              repository: {
-                type: "git",
-                url: ("git+https://github.com/" + $repository + ".git")
-              },
-              bugs: {
-                url: ("https://github.com/" + $repository + "/issues")
-              },
-              homepage: ("https://github.com/" + $repository + "#readme"),
-              xUpstreamRevision: $upstreamSha
-            }' > generated/package.json
-
-      - name: Generate TypeScript configuration
-        shell: bash
-        run: |
-          cat > generated/tsconfig.json <<'EOF'
-          {
-            "compilerOptions": {
-              "target": "ES2022",
-              "lib": [
-                "ES2022",
-                "DOM",
-                "DOM.Iterable"
-              ],
-              "module": "ESNext",
-              "moduleResolution": "Bundler",
-              "jsx": "react-jsx",
-              "strict": true,
-              "skipLibCheck": true,
-              "esModuleInterop": true,
-              "allowSyntheticDefaultImports": true,
-              "resolveJsonModule": true,
-              "isolatedModules": true,
-              "declaration": true,
-              "declarationDir": "./dist/types",
-              "declarationMap": false,
-              "sourceMap": true
-            },
-            "include": [
-              "src"
-            ]
-          }
-          EOF
-
-      - name: Generate Rollup configuration
-        shell: bash
-        run: |
-          cat > generated/rollup.config.mjs <<'EOF'
-          import typescript from '@rollup/plugin-typescript'
-          import copy from 'rollup-plugin-copy'
-          import del from 'rollup-plugin-delete'
-          import dts from 'rollup-plugin-dts'
-          import peerDepsExternal from 'rollup-plugin-peer-deps-external'
-          import postcss from 'rollup-plugin-postcss'
-
-          const external = [
-            '@mantine/core',
-            '@mantine/dates',
-            '@mantine/hooks',
-            '@tabler/icons-react',
-
-            '@tanstack/match-sorter-utils',
-            '@tanstack/react-store',
-            '@tanstack/react-table',
-            '@tanstack/react-virtual',
-
-            'clsx',
-            'dayjs',
-            'react',
-            'react-dom',
-            'react/jsx-runtime',
-          ]
-
-          export default [
-            {
-              input: './src/index.ts',
-
-              external,
-
-              output: {
-                file: './dist/index.js',
-                format: 'esm',
-                sourcemap: true,
-              },
-
-              plugins: [
-                peerDepsExternal(),
-
-                typescript({
-                  rootDir: './src',
-                  declaration: true,
-                  declarationDir: './dist/types',
-                  sourceMap: true,
-                }),
-
-                postcss({
-                  extract: true,
-                  minimize: false,
-                  modules: true,
-                }),
-              ],
-            },
-
-            {
-              input: './dist/types/index.d.ts',
-
-              external,
-
-              output: {
-                file: './dist/index.d.ts',
-                format: 'esm',
-              },
-
-              plugins: [
-                copy({
-                  hook: 'buildStart',
-                  targets: [
-                    {
-                      src: './dist/index.css',
-                      dest: './',
-                      rename: 'styles.css',
-                    },
-                  ],
-                }),
-
-                dts(),
-
-                del({
-                  hook: 'buildEnd',
-                  targets: [
-                    './dist/index.css',
-                    './dist/types',
-                  ],
-                }),
-              ],
-            },
-          ]
-          EOF
-
-      - name: Generate package documentation
-        shell: bash
-        env:
-          UPSTREAM_SHA: ${{ steps.upstream.outputs.sha }}
-        run: |
-          cat > generated/README.md <<EOF
-          # ${PACKAGE_NAME}
-
-          An ESM-only build of the reusable Mantine React Table implementation
-          from the TanStack Table beta examples.
-
-          The example application, Faker data, example tables, Vite
-          configuration, and tests are not included.
-
-          ## Installation
-
-          \`\`\`bash
-          npm install ${PACKAGE_NAME}
-          \`\`\`
-
-          ## Usage
-
-          \`\`\`tsx
-          import {
-            MantineReactTable,
-            createMRTColumnHelper,
-            useMantineReactTable,
-          } from '${PACKAGE_NAME}'
-
-          import '${PACKAGE_NAME}/styles.css'
-          \`\`\`
-
-          Applications must also load Mantine's normal styles:
-
-          \`\`\`tsx
-          import '@mantine/core/styles.css'
-          import '@mantine/dates/styles.css'
-          \`\`\`
-          EOF
-
-          cat > generated/UPSTREAM.md <<EOF
-          # Upstream source
-
-          - Repository: https://github.com/${UPSTREAM_REPOSITORY}
-          - Ref: \`${UPSTREAM_REF}\`
-          - Source: \`${UPSTREAM_PATH}/src/mantine-react-table\`
-          - Commit: \`${UPSTREAM_SHA}\`
-
-          Only the reusable Mantine React Table implementation is included.
-          EOF
+        run: ./scripts/generate-package-metadata.sh
 
       - name: Install dependencies
         working-directory: generated
-        shell: bash
         run: npm install --ignore-scripts
 
       - name: Type-check
         working-directory: generated
-        shell: bash
         run: npm run typecheck
 
       - name: Build
         working-directory: generated
-        shell: bash
         run: npm run build
 
       - name: Validate package
         working-directory: generated
-        shell: bash
-        run: |
-          set -euo pipefail
-
-          test -f dist/index.js
-          test -f dist/index.js.map
-          test -f dist/index.d.ts
-
-          if find src -type f -name '*.css' | grep -q .; then
-            test -f styles.css
-          fi
-
-          npm pack --dry-run
+        run: ../scripts/validate-package.sh
 
       - name: Publish to npm
         working-directory: generated
-        shell: bash
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
-        run: |
-          npm publish \
-            --access public \
-            --tag "${{ inputs.npm_tag }}" \
-            --provenance
+        run: >-
+          npm publish
+          --access public
+          --tag "${{ inputs.npm_tag }}"
+          --provenance
