@@ -27,7 +27,7 @@ concurrency:
 
 env:
   UPSTREAM_REPOSITORY: TanStack/table
-  UPSTREAM_REF: beta
+  UPSTREAM_REF: main
   UPSTREAM_PATH: examples/react/mantine-react-table
   PACKAGE_NAME: '@hillac/mantine-react-table'
 
