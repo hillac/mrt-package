@@ -52,8 +52,11 @@ jobs:
             examples/react/mantine-react-table/package.json
             LICENSE
 
-      - name: Patch Mantine React Table loading state
-        run: git -C upstream apply ../patches/include-loading-state.patch
+      - name: Apply Mantine React Table patches
+        run: |
+          for patch in patches/*.patch; do
+            git -C upstream apply "../$patch"
+          done
 
       - name: Set up Node.js
         uses: actions/setup-node@v4
