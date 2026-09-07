@@ -1,0 +1,12 @@
+diff --git a/examples/react/mantine-react-table/src/mantine-react-table/utils/column.utils.ts b/examples/react/mantine-react-table/src/mantine-react-table/utils/column.utils.ts
+--- a/examples/react/mantine-react-table/src/mantine-react-table/utils/column.utils.ts
++++ b/examples/react/mantine-react-table/src/mantine-react-table/utils/column.utils.ts
+@@ -99,7 +99,7 @@ export const getDefaultColumnFilterFn = <TData extends MRT_RowData>(
+   columnDef: MRT_ColumnDef<TData>,
+ ): MRT_FilterOption => {
+   const { filterVariant } = columnDef
+-  if (filterVariant === 'multi-select') return 'arrIncludesSome'
++  if (filterVariant === 'multi-select') return 'arrHas'
+   if (filterVariant?.includes('range')) return 'betweenInclusive'
+   if (['checkbox', 'date', 'select'].includes(filterVariant || ''))
+     return 'equals'
