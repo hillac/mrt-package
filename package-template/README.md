@@ -1,16 +1,17 @@
 # @@PACKAGE_NAME@@
 
 An ESM-only build of the reusable Mantine React Table implementation from the
-TanStack Table beta examples.
+TanStack Table examples.
 
-The example application, Faker data, example tables, Vite configuration, and
-tests are not included.
+See the [migration guide here](https://github.com/TanStack/table/blob/290284f29867021c77afbdd02c05f16f862cb509/examples/react/mantine-react-table/README.md) for upgrading from the old mantine-react-table v2.
 
 ## Installation
 
 ```bash
 npm install @@PACKAGE_NAME@@
 ```
+
+If you dont want to have to update all your imports, you can also just alias it for `mantine-react-table` in your package.json.
 
 ## Usage
 
