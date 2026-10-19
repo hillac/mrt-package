@@ -1,0 +1,135 @@
+diff --git a/examples/react/mantine-react-table/src/mantine-react-table/hooks/useMRT_TableInstance.ts b/examples/react/mantine-react-table/src/mantine-react-table/hooks/useMRT_TableInstance.ts
+--- a/examples/react/mantine-react-table/src/mantine-react-table/hooks/useMRT_TableInstance.ts
++++ b/examples/react/mantine-react-table/src/mantine-react-table/hooks/useMRT_TableInstance.ts
+@@ -47,3 +47,33 @@
+ } from '../types'
++
++// These rows exist only to render skeletons, not as application TData.
++const skeletonRowMarker = Symbol('mrt-skeleton-row')
++// TanStack v9 caches row-model factories at construction. Keep the real
++// factories registered, but don't run faceting over placeholder rows.
++const skipSkeletonFacets = <TValue,>(
++  factory: (table: any, columnId: string) => () => TValue,
++  makeEmptyValue: () => TValue,
++) =>
++  (table: any, columnId: string) => {
++    const getValue = factory(table, columnId)
++    // Facet consumers may mutate Maps; never share one between columns/tables.
++    const emptyValue = makeEmptyValue()
++    return () =>
++      table.options.data[0]?.[skeletonRowMarker] ? emptyValue : getValue()
++  }
++
++const withoutSkeletonAccessors = <TData extends MRT_RowData>(
++  columns: Array<MRT_ColumnDef<TData>>,
++): Array<MRT_ColumnDef<TData>> =>
++  columns.map((column) => ({
++    ...column,
++    // Cloning avoids mutating consumer definitions or prepared-column refs.
++    ...(column.accessorFn && { accessorFn: () => undefined }),
++    ...(column.getUniqueValues && { getUniqueValues: () => [] }),
++    ...(column.columns && {
++      columns: withoutSkeletonAccessors(column.columns),
++    }),
++  }))
++
+ /**
+  * The MRT hook
+@@ -309,29 +339,84 @@
+-  statefulTableOptions.columns = columnDefsRef.current
+-  // if loading, generate blank rows to show skeleton loaders
++  const realData = statefulTableOptions.data
++  const showSkeletonRows =
++    (statefulTableOptions.state.isLoading ||
++      statefulTableOptions.state.showSkeletons) &&
++    !realData.length
++
++  // getAutoSortDir/getAutoSortFn and filter inference read row.getValue()
++  // even if sorting/filtering is manual. They must never call user accessors
++  // with the synthetic records. Keep original definitions for real rows.
++  const preparedColumns = columnDefsRef.current
++  statefulTableOptions.columns = useMemo(
++    () =>
++      showSkeletonRows
++        ? withoutSkeletonAccessors(preparedColumns)
++        : preparedColumns,
++    [showSkeletonRows, preparedColumns],
++  )
++
++  // Generate only the display placeholders, not fake application TData.
+   statefulTableOptions.data = useMemo(
+     () =>
+-      (statefulTableOptions.state.isLoading ||
+-        statefulTableOptions.state.showSkeletons) &&
+-      !statefulTableOptions.data.length
++      showSkeletonRows
+         ? [
+             ...Array(
+               Math.min(statefulTableOptions.state.pagination.pageSize, 20),
+             ).fill(null),
+           ].map(() =>
+             Object.assign(
+-              {},
++              { [skeletonRowMarker]: true },
+               ...getAllLeafColumnDefs(statefulTableOptions.columns).map(
+-                (col) => ({
+-                  [getColumnId(col)]: null,
+-                }),
++                (col) => ({ [getColumnId(col)]: null }),
+               ),
+             ),
+           )
+-        : statefulTableOptions.data,
++        : realData,
+     [
+-      statefulTableOptions.data,
+-      statefulTableOptions.state.isLoading,
+-      statefulTableOptions.state.showSkeletons,
++      realData,
++      showSkeletonRows,
++      statefulTableOptions.columns,
++      statefulTableOptions.state.pagination.pageSize,
+     ],
+   )
++
++  // Do not process placeholders through row-model pipelines. In particular,
++  // do NOT remove their factories from `features`: v9 freezes its registries
++  // at mount and the same instance must work when real data arrives.
++  if (showSkeletonRows) {
++    statefulTableOptions.manualFiltering = true
++    statefulTableOptions.manualGrouping = true
++    statefulTableOptions.manualSorting = true
++    statefulTableOptions.manualPagination = true
++    statefulTableOptions.manualExpanding = true
++    statefulTableOptions.getRowId = (_row, index) => `mrt-skeleton-${index}`
++    statefulTableOptions.getSubRows = () => undefined
++    statefulTableOptions.enableFacetedValues = false
++  }
++
++  // Faceted factories are independent of manualFiltering and are cached by v9.
++  // Register wrappers on every render that check the current data, rather than
++  // capturing the initial loading state and disabling faceting permanently.
++  const features = statefulTableOptions.features
++  statefulTableOptions.features = {
++    ...features,
++    ...(features.facetedRowModel && {
++      facetedRowModel: skipSkeletonFacets(
++        features.facetedRowModel,
++        () => ({ rows: [], flatRows: [], rowsById: {} }),
++      ) as typeof features.facetedRowModel,
++    }),
++    ...(features.facetedUniqueValues && {
++      facetedUniqueValues: skipSkeletonFacets(
++        features.facetedUniqueValues,
++        () => new Map(),
++      ) as typeof features.facetedUniqueValues,
++    }),
++    ...(features.facetedMinMaxValues && {
++      facetedMinMaxValues: skipSkeletonFacets(
++        features.facetedMinMaxValues,
++        () => undefined,
++      ) as typeof features.facetedMinMaxValues,
++    }),
++  }
++
+   const table = useTable(

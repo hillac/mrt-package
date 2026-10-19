@@ -27,7 +27,8 @@
   "scripts": {
     "clean": "rimraf dist styles.css",
     "build": "rollup --config rollup.config.mjs",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test": "node --test tests/*.test.mjs"
   },
   "publishConfig": {
     "access": "public",

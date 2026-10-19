@@ -70,6 +70,7 @@ jq \
         "@types/react-dom": $typesReactDom,
         "clsx": $clsx,
         "dayjs": $dayjs,
+        "jsdom": "^26.1.0",
         "react": $react,
         "react-dom": $reactDom,
         "rimraf": "^6.0.1",

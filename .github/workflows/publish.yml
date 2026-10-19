@@ -114,6 +114,9 @@ jobs:
       - name: Build
         working-directory: generated
         run: npm run build
+      - name: Regression tests
+        working-directory: generated
+        run: npm test
 
       - name: Validate package
         working-directory: generated
