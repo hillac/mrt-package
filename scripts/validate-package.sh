@@ -10,4 +10,4 @@ if find src -type f -name '*.css' -print -quit | grep -q .; then
   test -f styles.css
 fi
 
-npm pack --dry-run
+pnpm pack --dry-run

@@ -1,0 +1,97 @@
+{
+  "name": "@hillac/mantine-react-table",
+  "version": "1.0.5",
+  "description": "Mantine React Table for Mantine 9 and TanStack Table 9",
+  "license": "MIT",
+  "type": "module",
+  "packageManager": "pnpm@12.6.0",
+  "engines": {
+    "node": ">=24 <25"
+  },
+  "sideEffects": [
+    "*.css"
+  ],
+  "main": "./dist/index.js",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./styles.css": "./styles.css"
+  },
+  "files": [
+    "dist",
+    "styles.css",
+    "LICENSE",
+    "README.md",
+    "UPSTREAM.md"
+  ],
+  "scripts": {
+    "build": "rollup --config rollup.config.mjs",
+    "clean": "rimraf dist styles.css demo-dist test-results playwright-report",
+    "demo": "vite --config demo/vite.config.ts",
+    "demo:build": "vite build --config demo/vite.config.ts",
+    "test": "pnpm run test:unit && pnpm run test:e2e",
+    "test:unit": "node --test tests/filter-range.test.cjs",
+    "test:e2e": "playwright test",
+    "typecheck": "tsc --noEmit && tsc --noEmit -p demo/tsconfig.json",
+    "validate": "pnpm run typecheck && pnpm run build && pnpm run demo:build && pnpm run test:unit && pnpm run test:e2e && ./scripts/validate-package.sh"
+  },
+  "peerDependencies": {
+    "@mantine/core": "^9.6.3",
+    "@mantine/dates": "^9.6.3",
+    "@mantine/hooks": "^9.6.3",
+    "@tabler/icons-react": "^3.48.0",
+    "clsx": "^2.1.1",
+    "dayjs": "^1.11.23",
+    "react": "^19.3.0",
+    "react-dom": "^19.3.0"
+  },
+  "dependencies": {
+    "@tanstack/match-sorter-utils": "^9.2.6",
+    "@tanstack/react-store": "^0.11.2",
+    "@tanstack/react-table": "^9.3.1",
+    "@tanstack/react-virtual": "^3.14.13"
+  },
+  "devDependencies": {
+    "@mantine/core": "^9.6.3",
+    "@mantine/dates": "^9.6.3",
+    "@mantine/hooks": "^9.6.3",
+    "@playwright/test": "^1.56.1",
+    "@rollup/plugin-typescript": "^12.1.4",
+    "@tabler/icons-react": "^3.48.0",
+    "@types/node": "^24.10.0",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "@vitejs/plugin-react": "^6.1.1",
+    "clsx": "^2.1.1",
+    "dayjs": "^1.11.23",
+    "esbuild": "^0.25.12",
+    "postcss": "^8.5.28",
+    "postcss-preset-mantine": "^1.18.0",
+    "postcss-simple-vars": "^7.0.1",
+    "react": "^19.3.0",
+    "react-dom": "^19.3.0",
+    "rimraf": "^6.0.1",
+    "rollup": "^4.46.2",
+    "rollup-plugin-copy": "^3.5.0",
+    "rollup-plugin-delete": "^3.0.1",
+    "rollup-plugin-dts": "^6.2.1",
+    "rollup-plugin-peer-deps-external": "^2.2.4",
+    "rollup-plugin-postcss": "^4.0.2",
+    "tslib": "^2.8.1",
+    "typescript": "6.0.3",
+    "vite": "^8.3.2"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/hillac/mrt-package.git"
+  },
+  "bugs": {
+    "url": "https://github.com/hillac/mrt-package/issues"
+  },
+  "homepage": "https://github.com/hillac/mrt-package#readme",
+  "xUpstreamRevision": "c14e0221b1e656c7bb35e7b3d4cdf188719a3599"
+}

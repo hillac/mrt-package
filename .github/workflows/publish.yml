@@ -4,13 +4,13 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: npm package version, for example 0.1.0
+        description: npm package version, for example 1.1.0
         required: true
         type: string
       npm_tag:
         description: npm distribution tag
         required: true
-        default: beta
+        default: latest
         type: choice
         options:
           - beta
@@ -26,37 +26,16 @@ concurrency:
   cancel-in-progress: false
 
 env:
-  UPSTREAM_REPOSITORY: TanStack/table
-  UPSTREAM_REF: main
-  UPSTREAM_PATH: examples/react/mantine-react-table
   PACKAGE_NAME: '@hillac/mantine-react-table'
+  PNPM_VERSION: 12.6.0
 
 jobs:
   publish:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Check out publisher repository
+      - name: Check out package source
         uses: actions/checkout@v4
-
-      - name: Check out TanStack Table
-        uses: actions/checkout@v4
-        with:
-          repository: ${{ env.UPSTREAM_REPOSITORY }}
-          ref: ${{ env.UPSTREAM_REF }}
-          path: upstream
-          fetch-depth: 1
-          sparse-checkout-cone-mode: false
-          sparse-checkout: |
-            examples/react/mantine-react-table/src/mantine-react-table
-            examples/react/mantine-react-table/package.json
-            LICENSE
-
-      - name: Apply Mantine React Table patches
-        run: |
-          for patch in patches/*.patch; do
-            git -C upstream apply "../$patch"
-          done
 
       - name: Set up Node.js
         uses: actions/setup-node@v4
@@ -64,15 +43,11 @@ jobs:
           node-version: 24
           registry-url: https://registry.npmjs.org
 
-      - name: Update npm
-        run: npm install --global npm@latest
-
-      - name: Read upstream revision
-        id: upstream
-        working-directory: upstream
-        run: |
-          echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
-          echo "short_sha=$(git rev-parse --short=12 HEAD)" >> "$GITHUB_OUTPUT"
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: ${{ env.PNPM_VERSION }}
+          run_install: false
 
       - name: Validate requested version
         env:
@@ -82,49 +57,33 @@ jobs:
             echo "::error::Invalid semantic version: $REQUESTED_VERSION"
             exit 1
           fi
-
           echo "PACKAGE_VERSION=$REQUESTED_VERSION" >> "$GITHUB_ENV"
 
       - name: Check whether version already exists
         run: |
-          if npm view "${PACKAGE_NAME}@${PACKAGE_VERSION}" version \
-            --registry=https://registry.npmjs.org \
-            >/dev/null 2>&1
-          then
+          if pnpm view "${PACKAGE_NAME}@${PACKAGE_VERSION}" version --registry=https://registry.npmjs.org >/dev/null 2>&1; then
             echo "::error::${PACKAGE_NAME}@${PACKAGE_VERSION} already exists on npm."
             exit 1
           fi
 
-      - name: Prepare package source and configuration
-        run: ./scripts/prepare-source.sh
-
-      - name: Generate package metadata and documentation
-        env:
-          UPSTREAM_SHA: ${{ steps.upstream.outputs.sha }}
-        run: ./scripts/generate-package-metadata.sh
-
       - name: Install dependencies
-        working-directory: generated
-        run: npm install --ignore-scripts
+        run: pnpm install --frozen-lockfile
 
-      - name: Type-check
-        working-directory: generated
-        run: npm run typecheck
+      - name: Install Chromium
+        run: pnpm exec playwright install --with-deps chromium
 
-      - name: Build
-        working-directory: generated
-        run: npm run build
+      - name: Set package version
+        run: pnpm version "${PACKAGE_VERSION}" --no-git-tag-version
 
-      - name: Validate package
-        working-directory: generated
-        run: ../scripts/validate-package.sh
+      - name: Validate source, package, demo, and browser tests
+        run: pnpm run validate
 
       - name: Publish to npm
-        working-directory: generated
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
         run: >-
-          npm publish
+          pnpm publish
           --access public
           --tag "${{ inputs.npm_tag }}"
           --provenance
+          --no-git-checks

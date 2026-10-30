@@ -1,1 +1,6 @@
-generated/
+demo-dist/
+dist/
+node_modules/
+playwright-report/
+styles.css
+test-results/
