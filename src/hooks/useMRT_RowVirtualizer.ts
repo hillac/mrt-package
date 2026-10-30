@@ -1,6 +1,7 @@
 import { useCallback } from 'react'
 
 import { useVirtualizer } from '@tanstack/react-virtual'
+import { isSkeletonRow } from '../utils/skeleton.utils'
 import { parseFromValuesOrFunc } from '../utils/utils'
 import { extraIndexRangeExtractor } from '../utils/virtualization.utils'
 import type { Range } from '@tanstack/react-virtual'
@@ -40,7 +41,8 @@ export const useMRT_RowVirtualizer = <
     table,
   })
 
-  const rowCount = rows?.length ?? getRowModel().rows.length
+  const tableRows = rows ?? getRowModel().rows
+  const rowCount = tableRows.length
 
   const defaultRowHeightByDensity: Record<MRT_DensityState, number> = {
     lg: 62.7,
@@ -57,7 +59,8 @@ export const useMRT_RowVirtualizer = <
     count: renderDetailPanel ? rowCount * 2 : rowCount,
     estimateSize: (index) =>
       renderDetailPanel && index % 2 === 1
-        ? expanded === true
+        ? !isSkeletonRow(tableRows[Math.floor(index / 2)]?.original) &&
+          expanded === true
           ? 100
           : 0
         : normalRowHeight,

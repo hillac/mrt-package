@@ -19,6 +19,10 @@ import {
   showRowSelectionColumn,
   showRowSpacerColumn,
 } from '../utils/displayColumn.utils'
+import {
+  createSkeletonRows,
+  withoutSkeletonAccessors,
+} from '../utils/skeleton.utils'
 import { createRow } from '../utils/tanstack.helpers'
 import { getMRT_RowActionsColumnDef } from './display-columns/getMRT_RowActionsColumnDef'
 import { getMRT_RowDragColumnDef } from './display-columns/getMRT_RowDragColumnDef'
@@ -53,12 +57,12 @@ import type {
  * state, refs, and helpers. State management is built on top of TanStack
  * Store atoms (`useCreateAtom` from `@tanstack/react-store`):
  *
- * - **TanStack-aware slices** (`columnOrder`, `columnResizing`, `grouping`)
+ * - **TanStack-aware slices** (`columnOrder`, `columnResizing`)
  *   are passed via the `atoms` option on `useTable`. Library writes flow directly
  *   through these atoms, and they're automatically tracked in
  *   `table.state` by the v9 store.
- * - Pagination uses `state` and `onPaginationChange`, with local React state
- *   as the fallback when the consumer does not control it.
+ * - Pagination and grouping use `state` and their change callbacks, with local
+ *   React state as the fallback when the consumer does not control them.
  * - **MRT-only slices** (`density`, `isFullScreen`, `creatingRow`,
  *   `editingCell`, `editingRow`, `draggingColumn`, `draggingRow`,
  *   `hoveredColumn`, `hoveredRow`, `globalFilterFn`, `columnFilterFns`,
@@ -113,20 +117,19 @@ export const useMRT_TableInstance = <TData extends MRT_RowData>(
   const columnResizingAtom = useCreateAtom<MRT_ColumnResizingState>(
     initialState.columnResizing ?? ({} as MRT_ColumnResizingState),
   )
-  const groupingAtom = useCreateAtom<MRT_GroupingState>(
-    initialState.grouping ?? [],
-  )
-  // An external atom would take precedence over controlled state.pagination.
-  const [pagination, setPagination] = useState<MRT_PaginationState>(
-    initialState?.pagination ?? { pageIndex: 0, pageSize: 10 },
-  )
-
   // Subscribe so the consumer re-renders when these slices change. (The library
   // also reads from these atoms internally; the subscriptions here are for the
   // MRT component tree.)
   const columnOrder = useSelector(columnOrderAtom)
   const columnResizing = useSelector(columnResizingAtom)
-  const grouping = useSelector(groupingAtom)
+
+  // External atoms override controlled state, so keep these slices in React.
+  const [grouping, setGrouping] = useState<MRT_GroupingState>(
+    initialState.grouping ?? [],
+  )
+  const [pagination, setPagination] = useState<MRT_PaginationState>(
+    initialState?.pagination ?? { pageIndex: 0, pageSize: 10 },
+  )
 
   // ---------------------------------------------------------------------------
   // MRT-only atoms — these slices aren't part of v9's `TableState` so they
@@ -320,57 +323,104 @@ export const useMRT_TableInstance = <TData extends MRT_RowData>(
     })
     columnPreparationDepsRef.current = columnPreparationDeps
   }
-  statefulTableOptions.columns = columnDefsRef.current
+  const realData = statefulTableOptions.data
+  const showSkeletonRows =
+    !!(
+      statefulTableOptions.state.isLoading ||
+      statefulTableOptions.state.showSkeletons
+    ) && !realData.length
+  const preparedColumns = columnDefsRef.current
+  const defaultColumn = statefulTableOptions.defaultColumn
+  const pageSize = statefulTableOptions.state.pagination.pageSize
 
-  const isPlaceholderData =
-    !!(statefulTableOptions.state.isLoading ||
-      statefulTableOptions.state.showSkeletons) &&
-    !statefulTableOptions.data.length
-
-  // if loading, generate blank rows to show skeleton loaders
+  // Sort/filter inference can read values even with manual row models.
+  // Clone the prepared definitions, including inherited default callbacks.
+  statefulTableOptions.columns = useMemo(
+    () =>
+      showSkeletonRows
+        ? withoutSkeletonAccessors(preparedColumns, defaultColumn)
+        : preparedColumns,
+    [showSkeletonRows, preparedColumns, defaultColumn],
+  )
   statefulTableOptions.data = useMemo(
     () =>
-      isPlaceholderData
-        ? [
-            ...Array(
-              Math.min(statefulTableOptions.state.pagination.pageSize, 20),
-            ).fill(null),
-          ].map(() =>
-            Object.assign(
-              {},
-              ...getAllLeafColumnDefs(statefulTableOptions.columns).map(
-                (col) => ({
-                  [getColumnId(col)]: null,
-                }),
-              ),
-            ),
-          )
-        : statefulTableOptions.data,
+      showSkeletonRows
+        ? // The public table API is typed for application records. Keep the
+          // internal display-record assertion at this single boundary.
+          (createSkeletonRows(
+            statefulTableOptions.columns,
+            pageSize,
+          ) as unknown as Array<TData>)
+        : realData,
+    // Memoized rows/cells need fresh display records when visibility changes.
     [
-      statefulTableOptions.data,
-      isPlaceholderData,
-      statefulTableOptions.state.pagination.pageSize,
+      realData,
+      showSkeletonRows,
+      statefulTableOptions.columns,
+      pageSize,
+      statefulTableOptions.state.isLoading,
+      statefulTableOptions.state.showSkeletons,
     ],
   )
+
+  // Keep factories registered, but bypass data processing and row predicates
+  // for internal display rows. v9 shallow-merges options: explicitly assign
+  // every temporary option on every render, including undefined defaults.
+  statefulTableOptions.manualFiltering = showSkeletonRows
+    ? true
+    : statefulTableOptions.manualFiltering
+  statefulTableOptions.manualGrouping = showSkeletonRows
+    ? true
+    : statefulTableOptions.manualGrouping
+  statefulTableOptions.manualSorting = showSkeletonRows
+    ? true
+    : statefulTableOptions.manualSorting
+  statefulTableOptions.manualPagination = showSkeletonRows
+    ? true
+    : statefulTableOptions.manualPagination
+  statefulTableOptions.manualExpanding = showSkeletonRows
+    ? true
+    : statefulTableOptions.manualExpanding
+  statefulTableOptions.getRowId = showSkeletonRows
+    ? (_row, index) => `mrt-skeleton-${index}`
+    : statefulTableOptions.getRowId
+  statefulTableOptions.getSubRows = showSkeletonRows
+    ? () => undefined
+    : statefulTableOptions.getSubRows
+  statefulTableOptions.getRowCanExpand = showSkeletonRows
+    ? () => false
+    : statefulTableOptions.getRowCanExpand
+  statefulTableOptions.getIsRowExpanded = showSkeletonRows
+    ? () => false
+    : statefulTableOptions.getIsRowExpanded
+  statefulTableOptions.enableFacetedValues = showSkeletonRows
+    ? false
+    : statefulTableOptions.enableFacetedValues
+  statefulTableOptions.enableRowSelection = showSkeletonRows
+    ? false
+    : statefulTableOptions.enableRowSelection
+  statefulTableOptions.enableMultiRowSelection = showSkeletonRows
+    ? false
+    : statefulTableOptions.enableMultiRowSelection
+  statefulTableOptions.enableSubRowSelection = showSkeletonRows
+    ? false
+    : statefulTableOptions.enableSubRowSelection
+  statefulTableOptions.enableRowPinning = showSkeletonRows
+    ? false
+    : statefulTableOptions.enableRowPinning
 
   const table = useTable(
     {
       ...(statefulTableOptions as any),
-      // Placeholder rows are not TData. Never pass their null fields to
-      // consumer filters, comparators or aggregators, or page them away.
-      manualFiltering: isPlaceholderData || statefulTableOptions.manualFiltering,
-      manualSorting: isPlaceholderData || statefulTableOptions.manualSorting,
-      manualGrouping: isPlaceholderData || statefulTableOptions.manualGrouping,
-      manualPagination: isPlaceholderData || statefulTableOptions.manualPagination,
       onPaginationChange:
         statefulTableOptions.onPaginationChange ?? setPagination,
+      onGroupingChange: statefulTableOptions.onGroupingChange ?? setGrouping,
       globalFilterFn: (globalFilterFn ?? 'fuzzy') as any,
       // Hand TanStack-aware slices over to our external atoms — library writes
       // (e.g. drag-resize) flow straight into them.
       atoms: {
         columnOrder: columnOrderAtom,
         columnResizing: columnResizingAtom,
-        grouping: groupingAtom,
       },
     },
     (state) => state, // default selector

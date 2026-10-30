@@ -402,7 +402,7 @@ for (const loadingFlag of ['isLoading', 'showSkeletons']) {
         },
       },
       async (page) => {
-        await expect.poll(() => page.evaluate(() => window.snapshot().values)).toEqual([null, null]);
+        await expect.poll(() => page.evaluate(() => window.snapshot().values)).toEqual([undefined, undefined]);
         await page.evaluate(() => window.setData([
           { value: 2.0000001 }, { value: 0.25 }, { value: 0.5 }, { value: 1 },
         ]));
@@ -414,7 +414,7 @@ for (const loadingFlag of ['isLoading', 'showSkeletons']) {
           window.setState({ [flag]: true });
           window.setData([]);
         }, loadingFlag);
-        await expect.poll(() => page.evaluate(() => window.snapshot().values)).toEqual([null, null]);
+        await expect.poll(() => page.evaluate(() => window.snapshot().values)).toEqual([undefined, undefined]);
         assert.deepEqual(await page.evaluate(() => window.filterWrites), []);
       },
       { [loadingFlag]: true },

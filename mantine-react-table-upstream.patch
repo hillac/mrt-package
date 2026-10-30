@@ -1,3 +1,132 @@
+diff --git a/examples/react/mantine-react-table/src/mantine-react-table/components/body/MRT_TableBodyCell.tsx b/examples/react/mantine-react-table/src/mantine-react-table/components/body/MRT_TableBodyCell.tsx
+index 905d9a9..eae1d60 100644
+--- a/examples/react/mantine-react-table/src/mantine-react-table/components/body/MRT_TableBodyCell.tsx
++++ b/examples/react/mantine-react-table/src/mantine-react-table/components/body/MRT_TableBodyCell.tsx
+@@ -4,6 +4,7 @@ import { memo, useEffect, useRef, useState } from 'react'
+ 
+ import { Skeleton, TableTd, useDirection } from '@mantine/core'
+ 
++import { isSkeletonRow } from '../../utils/skeleton.utils'
+ import { parseCSSVarId } from '../../utils/style.utils'
+ import { parseFromValuesOrFunc } from '../../utils/utils'
+ import { MRT_CopyButton } from '../buttons/MRT_CopyButton'
+@@ -77,6 +78,7 @@ export const MRT_TableBodyCell = <TData extends MRT_RowData>({
+     showSkeletons,
+   } = state
+   const { column, row } = cell
++  const isSkeleton = isSkeletonRow(row.original)
+   const { columnDef } = column
+   const { columnDefType } = columnDef
+ 
+@@ -89,11 +91,16 @@ export const MRT_TableBodyCell = <TData extends MRT_RowData>({
+     table,
+   }
+   const tableCellProps = {
+-    ...parseFromValuesOrFunc(mantineTableBodyCellProps, args),
+-    ...parseFromValuesOrFunc(columnDef.mantineTableBodyCellProps, args),
++    ...(isSkeleton && typeof mantineTableBodyCellProps === 'function'
++      ? undefined
++      : parseFromValuesOrFunc(mantineTableBodyCellProps, args)),
++    ...(isSkeleton && typeof columnDef.mantineTableBodyCellProps === 'function'
++      ? undefined
++      : parseFromValuesOrFunc(columnDef.mantineTableBodyCellProps, args)),
+     ...rest,
+   }
+ 
++  // Dedicated skeleton customization remains available while loading.
+   const skeletonProps = parseFromValuesOrFunc(mantineSkeletonProps, args)
+ 
+   const [skeletonWidth, setSkeletonWidth] = useState(100)
+@@ -130,6 +137,7 @@ export const MRT_TableBodyCell = <TData extends MRT_RowData>({
+     column.getIsPinned()
+ 
+   const isEditable =
++    !isSkeleton &&
+     !cell.getIsPlaceholder() &&
+     parseFromValuesOrFunc(enableEditing, row) &&
+     parseFromValuesOrFunc(columnDef.enableEditing, row) !== false
+@@ -146,9 +154,10 @@ export const MRT_TableBodyCell = <TData extends MRT_RowData>({
+     isEditable && createDisplayMode === 'row' && creatingRow?.id === row.id
+ 
+   const showClickToCopyButton =
+-    parseFromValuesOrFunc(enableClickToCopy, cell) ||
+-    (parseFromValuesOrFunc(columnDef.enableClickToCopy, cell) &&
+-      parseFromValuesOrFunc(columnDef.enableClickToCopy, cell) !== false)
++    !isSkeleton &&
++    (parseFromValuesOrFunc(enableClickToCopy, cell) ||
++      (parseFromValuesOrFunc(columnDef.enableClickToCopy, cell) &&
++        parseFromValuesOrFunc(columnDef.enableClickToCopy, cell) !== false))
+ 
+   const handleDoubleClick = (event: MouseEvent<HTMLTableCellElement>) => {
+     tableCellProps?.onDoubleClick?.(event)
+@@ -200,6 +209,12 @@ export const MRT_TableBodyCell = <TData extends MRT_RowData>({
+   }
+ 
+   const renderCellContent = () => {
++    if (isSkeleton) {
++      return showSkeletons === false ? null : (
++        <Skeleton height={20} width={skeletonWidth} {...skeletonProps} />
++      )
++    }
++
+     if (cell.getIsPlaceholder()) {
+       return columnDef.PlaceholderCell?.({ cell, column, row, table }) ?? null
+     }
+diff --git a/examples/react/mantine-react-table/src/mantine-react-table/components/body/MRT_TableBodyRow.tsx b/examples/react/mantine-react-table/src/mantine-react-table/components/body/MRT_TableBodyRow.tsx
+index 7f919f6..8642bce 100644
+--- a/examples/react/mantine-react-table/src/mantine-react-table/components/body/MRT_TableBodyRow.tsx
++++ b/examples/react/mantine-react-table/src/mantine-react-table/components/body/MRT_TableBodyRow.tsx
+@@ -5,6 +5,7 @@ import { memo, useMemo, useRef } from 'react'
+ import { Box, TableTr } from '@mantine/core'
+ 
+ import { getIsRowSelected } from '../../utils/row.utils'
++import { isSkeletonRow } from '../../utils/skeleton.utils'
+ import { parseFromValuesOrFunc } from '../../utils/utils'
+ import { MRT_TableDetailPanel } from './MRT_TableDetailPanel'
+ import { MRT_TableBodyCell, Memo_MRT_TableBodyCell } from './MRT_TableBodyCell'
+@@ -74,12 +75,13 @@ export const MRT_TableBodyRow = <TData extends MRT_RowData>({
+     rowPinning,
+   } = state
+ 
++  const isSkeleton = isSkeletonRow(row.original)
+   const visibleCells = row.getVisibleCells()
+ 
+   const { virtualColumns, virtualPaddingLeft, virtualPaddingRight } =
+     columnVirtualizer ?? {}
+ 
+-  const isRowSelected = getIsRowSelected({ row, table })
++  const isRowSelected = !isSkeleton && getIsRowSelected({ row, table })
+   const isRowPinned = enableRowPinning && row.getIsPinned()
+   const isRowStickyPinned =
+     isRowPinned && rowPinningDisplayMode?.includes('sticky') && 'sticky'
+@@ -87,11 +89,13 @@ export const MRT_TableBodyRow = <TData extends MRT_RowData>({
+   const isHoveredRow = hoveredRow?.id === row.id
+ 
+   const tableRowProps = {
+-    ...parseFromValuesOrFunc(mantineTableBodyRowProps, {
+-      renderedRowIndex,
+-      row,
+-      table,
+-    }),
++    ...(isSkeleton && typeof mantineTableBodyRowProps === 'function'
++      ? undefined
++      : parseFromValuesOrFunc(mantineTableBodyRowProps, {
++          renderedRowIndex,
++          row,
++          table,
++        })),
+     ...rest,
+   }
+ 
+@@ -236,7 +240,7 @@ export const MRT_TableBodyRow = <TData extends MRT_RowData>({
+           <Box component="td" display="flex" w={virtualPaddingRight} />
+         ) : null}
+       </TableTr>
+-      {renderDetailPanel && !row.getIsGrouped() && (
++      {renderDetailPanel && !isSkeleton && !row.getIsGrouped() && (
+         <MRT_TableDetailPanel
+           parentRowRef={rowRef}
+           renderedRowIndex={renderedRowIndex}
 diff --git a/examples/react/mantine-react-table/src/mantine-react-table/components/inputs/MRT_FilterRangeFields.tsx b/examples/react/mantine-react-table/src/mantine-react-table/components/inputs/MRT_FilterRangeFields.tsx
 index c00f131..3cae96a 100644
 --- a/examples/react/mantine-react-table/src/mantine-react-table/components/inputs/MRT_FilterRangeFields.tsx
@@ -538,8 +667,40 @@ index 497e5c7..9199c67 100644
      }
    }, [globalFilter])
  
+diff --git a/examples/react/mantine-react-table/src/mantine-react-table/hooks/useMRT_RowVirtualizer.ts b/examples/react/mantine-react-table/src/mantine-react-table/hooks/useMRT_RowVirtualizer.ts
+index fe3c70d..f362c23 100644
+--- a/examples/react/mantine-react-table/src/mantine-react-table/hooks/useMRT_RowVirtualizer.ts
++++ b/examples/react/mantine-react-table/src/mantine-react-table/hooks/useMRT_RowVirtualizer.ts
+@@ -1,6 +1,7 @@
+ import { useCallback } from 'react'
+ 
+ import { useVirtualizer } from '@tanstack/react-virtual'
++import { isSkeletonRow } from '../utils/skeleton.utils'
+ import { parseFromValuesOrFunc } from '../utils/utils'
+ import { extraIndexRangeExtractor } from '../utils/virtualization.utils'
+ import type { Range } from '@tanstack/react-virtual'
+@@ -40,7 +41,8 @@ export const useMRT_RowVirtualizer = <
+     table,
+   })
+ 
+-  const rowCount = rows?.length ?? getRowModel().rows.length
++  const tableRows = rows ?? getRowModel().rows
++  const rowCount = tableRows.length
+ 
+   const defaultRowHeightByDensity: Record<MRT_DensityState, number> = {
+     lg: 62.7,
+@@ -57,7 +59,8 @@ export const useMRT_RowVirtualizer = <
+     count: renderDetailPanel ? rowCount * 2 : rowCount,
+     estimateSize: (index) =>
+       renderDetailPanel && index % 2 === 1
+-        ? expanded === true
++        ? !isSkeletonRow(tableRows[Math.floor(index / 2)]?.original) &&
++          expanded === true
+           ? 100
+           : 0
+         : normalRowHeight,
 diff --git a/examples/react/mantine-react-table/src/mantine-react-table/hooks/useMRT_TableInstance.ts b/examples/react/mantine-react-table/src/mantine-react-table/hooks/useMRT_TableInstance.ts
-index d9f2390..e33e2b9 100644
+index d9f2390..4ad4d46 100644
 --- a/examples/react/mantine-react-table/src/mantine-react-table/hooks/useMRT_TableInstance.ts
 +++ b/examples/react/mantine-react-table/src/mantine-react-table/hooks/useMRT_TableInstance.ts
 @@ -1,4 +1,4 @@
@@ -548,81 +709,179 @@ index d9f2390..e33e2b9 100644
  
  import { useCreateAtom, useSelector } from '@tanstack/react-store'
  import { useTable } from '@tanstack/react-table'
-@@ -53,11 +53,12 @@ import type {
+@@ -19,6 +19,10 @@ import {
+   showRowSelectionColumn,
+   showRowSpacerColumn,
+ } from '../utils/displayColumn.utils'
++import {
++  createSkeletonRows,
++  withoutSkeletonAccessors,
++} from '../utils/skeleton.utils'
+ import { createRow } from '../utils/tanstack.helpers'
+ import { getMRT_RowActionsColumnDef } from './display-columns/getMRT_RowActionsColumnDef'
+ import { getMRT_RowDragColumnDef } from './display-columns/getMRT_RowDragColumnDef'
+@@ -53,11 +57,12 @@ import type {
   * state, refs, and helpers. State management is built on top of TanStack
   * Store atoms (`useCreateAtom` from `@tanstack/react-store`):
   *
 - * - **TanStack-aware slices** (`columnOrder`, `columnResizing`, `grouping`,
 - *   `pagination`) are passed via the `atoms` option on `useTable`. Library
 - *   writes (e.g. `table.setSorting(...)`, `table.firstPage()`) flow directly
-+ * - **TanStack-aware slices** (`columnOrder`, `columnResizing`, `grouping`)
++ * - **TanStack-aware slices** (`columnOrder`, `columnResizing`)
 + *   are passed via the `atoms` option on `useTable`. Library writes flow directly
   *   through these atoms, and they're automatically tracked in
   *   `table.state` by the v9 store.
-+ * - Pagination uses `state` and `onPaginationChange`, with local React state
-+ *   as the fallback when the consumer does not control it.
++ * - Pagination and grouping use `state` and their change callbacks, with local
++ *   React state as the fallback when the consumer does not control them.
   * - **MRT-only slices** (`density`, `isFullScreen`, `creatingRow`,
   *   `editingCell`, `editingRow`, `draggingColumn`, `draggingRow`,
   *   `hoveredColumn`, `hoveredRow`, `globalFilterFn`, `columnFilterFns`,
-@@ -115,7 +116,8 @@ export const useMRT_TableInstance = <TData extends MRT_RowData>(
-   const groupingAtom = useCreateAtom<MRT_GroupingState>(
-     initialState.grouping ?? [],
+@@ -112,20 +117,19 @@ export const useMRT_TableInstance = <TData extends MRT_RowData>(
+   const columnResizingAtom = useCreateAtom<MRT_ColumnResizingState>(
+     initialState.columnResizing ?? ({} as MRT_ColumnResizingState),
    )
+-  const groupingAtom = useCreateAtom<MRT_GroupingState>(
+-    initialState.grouping ?? [],
+-  )
 -  const paginationAtom = useCreateAtom<MRT_PaginationState>(
-+  // An external atom would take precedence over controlled state.pagination.
-+  const [pagination, setPagination] = useState<MRT_PaginationState>(
-     initialState?.pagination ?? { pageIndex: 0, pageSize: 10 },
-   )
- 
-@@ -125,7 +127,6 @@ export const useMRT_TableInstance = <TData extends MRT_RowData>(
+-    initialState?.pagination ?? { pageIndex: 0, pageSize: 10 },
+-  )
+-
+   // Subscribe so the consumer re-renders when these slices change. (The library
+   // also reads from these atoms internally; the subscriptions here are for the
+   // MRT component tree.)
    const columnOrder = useSelector(columnOrderAtom)
    const columnResizing = useSelector(columnResizingAtom)
-   const grouping = useSelector(groupingAtom)
+-  const grouping = useSelector(groupingAtom)
 -  const pagination = useSelector(paginationAtom)
++
++  // External atoms override controlled state, so keep these slices in React.
++  const [grouping, setGrouping] = useState<MRT_GroupingState>(
++    initialState.grouping ?? [],
++  )
++  const [pagination, setPagination] = useState<MRT_PaginationState>(
++    initialState?.pagination ?? { pageIndex: 0, pageSize: 10 },
++  )
  
    // ---------------------------------------------------------------------------
    // MRT-only atoms — these slices aren't part of v9's `TableState` so they
-@@ -321,12 +322,15 @@ export const useMRT_TableInstance = <TData extends MRT_RowData>(
+@@ -319,47 +323,104 @@ export const useMRT_TableInstance = <TData extends MRT_RowData>(
+     })
+     columnPreparationDepsRef.current = columnPreparationDeps
    }
-   statefulTableOptions.columns = columnDefsRef.current
+-  statefulTableOptions.columns = columnDefsRef.current
++  const realData = statefulTableOptions.data
++  const showSkeletonRows =
++    !!(
++      statefulTableOptions.state.isLoading ||
++      statefulTableOptions.state.showSkeletons
++    ) && !realData.length
++  const preparedColumns = columnDefsRef.current
++  const defaultColumn = statefulTableOptions.defaultColumn
++  const pageSize = statefulTableOptions.state.pagination.pageSize
  
-+  const isPlaceholderData =
-+    !!(statefulTableOptions.state.isLoading ||
-+      statefulTableOptions.state.showSkeletons) &&
-+    !statefulTableOptions.data.length
-+
-   // if loading, generate blank rows to show skeleton loaders
+-  // if loading, generate blank rows to show skeleton loaders
++  // Sort/filter inference can read values even with manual row models.
++  // Clone the prepared definitions, including inherited default callbacks.
++  statefulTableOptions.columns = useMemo(
++    () =>
++      showSkeletonRows
++        ? withoutSkeletonAccessors(preparedColumns, defaultColumn)
++        : preparedColumns,
++    [showSkeletonRows, preparedColumns, defaultColumn],
++  )
    statefulTableOptions.data = useMemo(
      () =>
 -      (statefulTableOptions.state.isLoading ||
 -        statefulTableOptions.state.showSkeletons) &&
 -      !statefulTableOptions.data.length
-+      isPlaceholderData
-         ? [
-             ...Array(
-               Math.min(statefulTableOptions.state.pagination.pageSize, 20),
-@@ -344,22 +348,29 @@ export const useMRT_TableInstance = <TData extends MRT_RowData>(
-         : statefulTableOptions.data,
+-        ? [
+-            ...Array(
+-              Math.min(statefulTableOptions.state.pagination.pageSize, 20),
+-            ).fill(null),
+-          ].map(() =>
+-            Object.assign(
+-              {},
+-              ...getAllLeafColumnDefs(statefulTableOptions.columns).map(
+-                (col) => ({
+-                  [getColumnId(col)]: null,
+-                }),
+-              ),
+-            ),
+-          )
+-        : statefulTableOptions.data,
++      showSkeletonRows
++        ? // The public table API is typed for application records. Keep the
++          // internal display-record assertion at this single boundary.
++          (createSkeletonRows(
++            statefulTableOptions.columns,
++            pageSize,
++          ) as unknown as Array<TData>)
++        : realData,
++    // Memoized rows/cells need fresh display records when visibility changes.
      [
-       statefulTableOptions.data,
--      statefulTableOptions.state.isLoading,
--      statefulTableOptions.state.showSkeletons,
-+      isPlaceholderData,
-+      statefulTableOptions.state.pagination.pageSize,
+-      statefulTableOptions.data,
++      realData,
++      showSkeletonRows,
++      statefulTableOptions.columns,
++      pageSize,
+       statefulTableOptions.state.isLoading,
+       statefulTableOptions.state.showSkeletons,
      ],
    )
  
++  // Keep factories registered, but bypass data processing and row predicates
++  // for internal display rows. v9 shallow-merges options: explicitly assign
++  // every temporary option on every render, including undefined defaults.
++  statefulTableOptions.manualFiltering = showSkeletonRows
++    ? true
++    : statefulTableOptions.manualFiltering
++  statefulTableOptions.manualGrouping = showSkeletonRows
++    ? true
++    : statefulTableOptions.manualGrouping
++  statefulTableOptions.manualSorting = showSkeletonRows
++    ? true
++    : statefulTableOptions.manualSorting
++  statefulTableOptions.manualPagination = showSkeletonRows
++    ? true
++    : statefulTableOptions.manualPagination
++  statefulTableOptions.manualExpanding = showSkeletonRows
++    ? true
++    : statefulTableOptions.manualExpanding
++  statefulTableOptions.getRowId = showSkeletonRows
++    ? (_row, index) => `mrt-skeleton-${index}`
++    : statefulTableOptions.getRowId
++  statefulTableOptions.getSubRows = showSkeletonRows
++    ? () => undefined
++    : statefulTableOptions.getSubRows
++  statefulTableOptions.getRowCanExpand = showSkeletonRows
++    ? () => false
++    : statefulTableOptions.getRowCanExpand
++  statefulTableOptions.getIsRowExpanded = showSkeletonRows
++    ? () => false
++    : statefulTableOptions.getIsRowExpanded
++  statefulTableOptions.enableFacetedValues = showSkeletonRows
++    ? false
++    : statefulTableOptions.enableFacetedValues
++  statefulTableOptions.enableRowSelection = showSkeletonRows
++    ? false
++    : statefulTableOptions.enableRowSelection
++  statefulTableOptions.enableMultiRowSelection = showSkeletonRows
++    ? false
++    : statefulTableOptions.enableMultiRowSelection
++  statefulTableOptions.enableSubRowSelection = showSkeletonRows
++    ? false
++    : statefulTableOptions.enableSubRowSelection
++  statefulTableOptions.enableRowPinning = showSkeletonRows
++    ? false
++    : statefulTableOptions.enableRowPinning
++
    const table = useTable(
      {
        ...(statefulTableOptions as any),
-+      // Placeholder rows are not TData. Never pass their null fields to
-+      // consumer filters, comparators or aggregators, or page them away.
-+      manualFiltering: isPlaceholderData || statefulTableOptions.manualFiltering,
-+      manualSorting: isPlaceholderData || statefulTableOptions.manualSorting,
-+      manualGrouping: isPlaceholderData || statefulTableOptions.manualGrouping,
-+      manualPagination: isPlaceholderData || statefulTableOptions.manualPagination,
 +      onPaginationChange:
 +        statefulTableOptions.onPaginationChange ?? setPagination,
++      onGroupingChange: statefulTableOptions.onGroupingChange ?? setGrouping,
        globalFilterFn: (globalFilterFn ?? 'fuzzy') as any,
        // Hand TanStack-aware slices over to our external atoms — library writes
 -      // (e.g. `table.setPageIndex(...)`, drag-resize) flow straight into them.
@@ -630,12 +889,12 @@ index d9f2390..e33e2b9 100644
        atoms: {
          columnOrder: columnOrderAtom,
          columnResizing: columnResizingAtom,
-         grouping: groupingAtom,
+-        grouping: groupingAtom,
 -        pagination: paginationAtom,
        },
      },
      (state) => state, // default selector
-@@ -387,7 +398,13 @@ export const useMRT_TableInstance = <TData extends MRT_RowData>(
+@@ -387,7 +448,13 @@ export const useMRT_TableInstance = <TData extends MRT_RowData>(
      hoveredColumn,
      hoveredRow,
      isFullScreen,
@@ -651,10 +910,58 @@ index d9f2390..e33e2b9 100644
      showGlobalFilter,
      showToolbarDropZone,
 diff --git a/examples/react/mantine-react-table/src/mantine-react-table/hooks/useMRT_TableOptions.ts b/examples/react/mantine-react-table/src/mantine-react-table/hooks/useMRT_TableOptions.ts
-index e45452e..7082457 100644
+index e45452e..6821261 100644
 --- a/examples/react/mantine-react-table/src/mantine-react-table/hooks/useMRT_TableOptions.ts
 +++ b/examples/react/mantine-react-table/src/mantine-react-table/hooks/useMRT_TableOptions.ts
-@@ -171,13 +171,6 @@ export const useMRT_TableOptions: <TData extends MRT_RowData>(
+@@ -19,12 +19,26 @@ import { MRT_FilterFns } from '../fns/filterFns'
+ import { MRT_SortFns } from '../fns/sortingFns'
+ import { MRT_Default_Icons } from '../icons'
+ import { MRT_Localization_EN } from '../locales/en'
++import { skipSkeletonFacets } from '../utils/skeleton.utils'
++import type { StockFeatures } from '@tanstack/react-table'
+ import type {
+   MRT_DefinedTableOptions,
+   MRT_RowData,
+   MRT_TableOptions,
+ } from '../types'
+ 
++type MRT_FacetedFeatures<TData extends MRT_RowData> = StockFeatures & {
++  facetedRowModel?: ReturnType<
++    typeof createFacetedRowModel<StockFeatures, TData>
++  >
++  facetedMinMaxValues?: ReturnType<
++    typeof createFacetedMinMaxValues<StockFeatures, TData>
++  >
++  facetedUniqueValues?: ReturnType<
++    typeof createFacetedUniqueValues<StockFeatures, TData>
++  >
++}
++
+ export const MRT_DefaultColumn = {
+   filterVariant: 'text',
+   maxSize: 1000,
+@@ -88,14 +102,20 @@ export const useMRT_TableOptions: <TData extends MRT_RowData>(
+   enableSelectAll = true,
+   enableSorting = true,
+   enableStickyHeader = false,
++  enableSubRowSelection,
+   enableTableFooter = true,
+   enableTableHead = true,
+   enableToolbarInternalActions = true,
+   enableTopToolbar = true,
++  features,
+   filterFns,
++  getIsRowExpanded,
++  getRowCanExpand,
++  getRowId,
+   icons,
+   layoutMode,
+   localization,
++  manualExpanding,
+   manualFiltering,
+   manualGrouping,
+   manualPagination,
+@@ -171,11 +191,42 @@ export const useMRT_TableOptions: <TData extends MRT_RowData>(
      manualPagination = true
    }
  
@@ -663,11 +970,114 @@ index e45452e..7082457 100644
 -    manualGrouping = true
 -    manualPagination = true
 -    manualSorting = true
--  }
--
++  // v9 retains the feature registry from construction. Register the real
++  // factories before useMRT_TableInstance enables temporary manual modes.
++  const resolvedFeatures: MRT_FacetedFeatures<TData> = features ?? {
++    ...stockFeatures,
++    ...((enableColumnFilters || enableGlobalFilter || enableFilters) &&
++    !manualFiltering
++      ? { filteredRowModel: createFilteredRowModel(), filterFns }
++      : {}),
++    ...(enableSorting && !manualSorting
++      ? { sortedRowModel: createSortedRowModel(), sortFns }
++      : {}),
++    ...(enablePagination && !manualPagination
++      ? { paginatedRowModel: createPaginatedRowModel() }
++      : {}),
++    ...(enableExpanding || enableGrouping
++      ? { expandedRowModel: createExpandedRowModel() }
++      : {}),
++    ...(enableGrouping && !manualGrouping
++      ? {
++          groupedRowModel: createGroupedRowModel(),
++          aggregationFns,
++        }
++      : {}),
++    ...(enableFacetedValues
++      ? {
++          facetedRowModel: createFacetedRowModel<StockFeatures, TData>(),
++          facetedMinMaxValues: createFacetedMinMaxValues<
++            StockFeatures,
++            TData
++          >(),
++          facetedUniqueValues: createFacetedUniqueValues<
++            StockFeatures,
++            TData
++          >(),
++        }
++      : {}),
+   }
+ 
    return {
-     aggregationFns,
-     autoResetExpanded,
+@@ -217,44 +268,41 @@ export const useMRT_TableOptions: <TData extends MRT_RowData>(
+     enableSelectAll,
+     enableSorting,
+     enableStickyHeader,
++    enableSubRowSelection,
+     enableTableFooter,
+     enableTableHead,
+     enableToolbarInternalActions,
+     enableTopToolbar,
+     filterFns,
+     features: {
+-      ...stockFeatures,
+-      ...((enableColumnFilters || enableGlobalFilter || enableFilters) &&
+-      !manualFiltering
+-        ? { filteredRowModel: createFilteredRowModel(), filterFns }
+-        : {}),
+-      ...(enableSorting && !manualSorting
+-        ? { sortedRowModel: createSortedRowModel(), sortFns }
+-        : {}),
+-      ...(enablePagination && !manualPagination
+-        ? { paginatedRowModel: createPaginatedRowModel() }
+-        : {}),
+-      ...(enableExpanding || enableGrouping
+-        ? { expandedRowModel: createExpandedRowModel() }
+-        : {}),
+-      ...(enableGrouping && !manualGrouping
+-        ? {
+-            groupedRowModel: createGroupedRowModel(),
+-            aggregationFns,
+-          }
+-        : {}),
+-      ...(enableFacetedValues
+-        ? {
+-            facetedRowModel: createFacetedRowModel(),
+-            facetedMinMaxValues: createFacetedMinMaxValues(),
+-            facetedUniqueValues: createFacetedUniqueValues(),
+-          }
+-        : {}),
++      ...resolvedFeatures,
++      ...(resolvedFeatures.facetedRowModel && {
++        facetedRowModel: skipSkeletonFacets(
++          resolvedFeatures.facetedRowModel,
++          () => ({ rows: [], flatRows: [], rowsById: {} }),
++        ),
++      }),
++      ...(resolvedFeatures.facetedMinMaxValues && {
++        facetedMinMaxValues: skipSkeletonFacets(
++          resolvedFeatures.facetedMinMaxValues,
++          () => undefined,
++        ),
++      }),
++      ...(resolvedFeatures.facetedUniqueValues && {
++        facetedUniqueValues: skipSkeletonFacets(
++          resolvedFeatures.facetedUniqueValues,
++          () => new Map<unknown, number>(),
++        ),
++      }),
+     },
++    getIsRowExpanded,
++    getRowCanExpand,
++    getRowId,
+     getSubRows: (row: TData) => (row as any)?.subRows,
+     icons,
+     layoutMode,
+     localization,
++    manualExpanding,
+     manualFiltering,
+     manualGrouping,
+     manualPagination,
 diff --git a/examples/react/mantine-react-table/src/mantine-react-table/utils/column.utils.ts b/examples/react/mantine-react-table/src/mantine-react-table/utils/column.utils.ts
 index 40cd109..836c323 100644
 --- a/examples/react/mantine-react-table/src/mantine-react-table/utils/column.utils.ts
@@ -681,3 +1091,77 @@ index 40cd109..836c323 100644
    if (filterVariant?.includes('range')) return 'betweenInclusive'
    if (['checkbox', 'date', 'select'].includes(filterVariant || ''))
      return 'equals'
+diff --git a/examples/react/mantine-react-table/src/mantine-react-table/utils/skeleton.utils.ts b/examples/react/mantine-react-table/src/mantine-react-table/utils/skeleton.utils.ts
+new file mode 100644
+index 0000000..8a885dc
+--- /dev/null
++++ b/examples/react/mantine-react-table/src/mantine-react-table/utils/skeleton.utils.ts
+@@ -0,0 +1,68 @@
++import { getAllLeafColumnDefs, getColumnId } from './column.utils'
++import type { MRT_ColumnDef, MRT_RowData } from '../types'
++
++const skeletonRowMarker = Symbol('mrt-skeleton-row')
++
++type MRT_SkeletonRow = Record<string, null> & {
++  [skeletonRowMarker]: true
++}
++
++export const isSkeletonRow = (original: MRT_RowData | undefined): boolean =>
++  typeof original === 'object' &&
++  original !== null &&
++  skeletonRowMarker in original
++
++export const createSkeletonRows = <TData extends MRT_RowData>(
++  columns: Array<MRT_ColumnDef<TData>>,
++  pageSize: number,
++): Array<MRT_SkeletonRow> => {
++  const values: Record<string, null> = Object.fromEntries(
++    getAllLeafColumnDefs(columns).map((column) => [getColumnId(column), null]),
++  )
++
++  return Array.from(
++    { length: Math.min(pageSize, 20) },
++    (): MRT_SkeletonRow => ({ ...values, [skeletonRowMarker]: true }),
++  )
++}
++
++export const withoutSkeletonAccessors = <TData extends MRT_RowData>(
++  columns: Array<MRT_ColumnDef<TData>>,
++  defaultColumn?: Partial<MRT_ColumnDef<TData>>,
++): Array<MRT_ColumnDef<TData>> =>
++  columns.map((column) => {
++    // TanStack merges defaults after MRT prepares columns. Include inherited
++    // callbacks, while preserving explicit overrides such as undefined.
++    const resolvedColumn = { ...defaultColumn, ...column }
++    return {
++      ...column,
++      ...((resolvedColumn.accessorFn ||
++        resolvedColumn.accessorKey !== undefined) && {
++        accessorFn: () => undefined,
++      }),
++      ...(resolvedColumn.getUniqueValues && { getUniqueValues: () => [] }),
++      ...(resolvedColumn.getGroupingValue && {
++        getGroupingValue: () => undefined,
++      }),
++      ...(column.columns && {
++        columns: withoutSkeletonAccessors(column.columns, defaultColumn),
++      }),
++    }
++  })
++
++export const skipSkeletonFacets =
++  <TTable extends { options: { data: ReadonlyArray<MRT_RowData> } }, TValue>(
++    factory: (table: TTable, columnId: string) => () => TValue,
++    makeEmptyValue: () => NoInfer<TValue>,
++  ): ((table: TTable, columnId: string) => () => TValue) =>
++  (table, columnId) => {
++    let getValue: (() => TValue) | undefined
++    // Stable per-column results avoid sharing mutable Maps between consumers.
++    const emptyValue = makeEmptyValue()
++    return () => {
++      if (isSkeletonRow(table.options.data[0])) return emptyValue
++      // Even a custom factory must not inspect the synthetic records.
++      getValue ??= factory(table, columnId)
++      return getValue()
++    }
++  }

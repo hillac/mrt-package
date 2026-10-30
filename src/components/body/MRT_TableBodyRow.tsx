@@ -5,6 +5,7 @@ import { memo, useMemo, useRef } from 'react'
 import { Box, TableTr } from '@mantine/core'
 
 import { getIsRowSelected } from '../../utils/row.utils'
+import { isSkeletonRow } from '../../utils/skeleton.utils'
 import { parseFromValuesOrFunc } from '../../utils/utils'
 import { MRT_TableDetailPanel } from './MRT_TableDetailPanel'
 import { MRT_TableBodyCell, Memo_MRT_TableBodyCell } from './MRT_TableBodyCell'
@@ -74,12 +75,13 @@ export const MRT_TableBodyRow = <TData extends MRT_RowData>({
     rowPinning,
   } = state
 
+  const isSkeleton = isSkeletonRow(row.original)
   const visibleCells = row.getVisibleCells()
 
   const { virtualColumns, virtualPaddingLeft, virtualPaddingRight } =
     columnVirtualizer ?? {}
 
-  const isRowSelected = getIsRowSelected({ row, table })
+  const isRowSelected = !isSkeleton && getIsRowSelected({ row, table })
   const isRowPinned = enableRowPinning && row.getIsPinned()
   const isRowStickyPinned =
     isRowPinned && rowPinningDisplayMode?.includes('sticky') && 'sticky'
@@ -87,11 +89,13 @@ export const MRT_TableBodyRow = <TData extends MRT_RowData>({
   const isHoveredRow = hoveredRow?.id === row.id
 
   const tableRowProps = {
-    ...parseFromValuesOrFunc(mantineTableBodyRowProps, {
-      renderedRowIndex,
-      row,
-      table,
-    }),
+    ...(isSkeleton && typeof mantineTableBodyRowProps === 'function'
+      ? undefined
+      : parseFromValuesOrFunc(mantineTableBodyRowProps, {
+          renderedRowIndex,
+          row,
+          table,
+        })),
     ...rest,
   }
 
@@ -236,7 +240,7 @@ export const MRT_TableBodyRow = <TData extends MRT_RowData>({
           <Box component="td" display="flex" w={virtualPaddingRight} />
         ) : null}
       </TableTr>
-      {renderDetailPanel && !row.getIsGrouped() && (
+      {renderDetailPanel && !isSkeleton && !row.getIsGrouped() && (
         <MRT_TableDetailPanel
           parentRowRef={rowRef}
           renderedRowIndex={renderedRowIndex}

@@ -19,11 +19,25 @@ import { MRT_FilterFns } from '../fns/filterFns'
 import { MRT_SortFns } from '../fns/sortingFns'
 import { MRT_Default_Icons } from '../icons'
 import { MRT_Localization_EN } from '../locales/en'
+import { skipSkeletonFacets } from '../utils/skeleton.utils'
+import type { StockFeatures } from '@tanstack/react-table'
 import type {
   MRT_DefinedTableOptions,
   MRT_RowData,
   MRT_TableOptions,
 } from '../types'
+
+type MRT_FacetedFeatures<TData extends MRT_RowData> = StockFeatures & {
+  facetedRowModel?: ReturnType<
+    typeof createFacetedRowModel<StockFeatures, TData>
+  >
+  facetedMinMaxValues?: ReturnType<
+    typeof createFacetedMinMaxValues<StockFeatures, TData>
+  >
+  facetedUniqueValues?: ReturnType<
+    typeof createFacetedUniqueValues<StockFeatures, TData>
+  >
+}
 
 export const MRT_DefaultColumn = {
   filterVariant: 'text',
@@ -88,14 +102,20 @@ export const useMRT_TableOptions: <TData extends MRT_RowData>(
   enableSelectAll = true,
   enableSorting = true,
   enableStickyHeader = false,
+  enableSubRowSelection,
   enableTableFooter = true,
   enableTableHead = true,
   enableToolbarInternalActions = true,
   enableTopToolbar = true,
+  features,
   filterFns,
+  getIsRowExpanded,
+  getRowCanExpand,
+  getRowId,
   icons,
   layoutMode,
   localization,
+  manualExpanding,
   manualFiltering,
   manualGrouping,
   manualPagination,
@@ -171,6 +191,44 @@ export const useMRT_TableOptions: <TData extends MRT_RowData>(
     manualPagination = true
   }
 
+  // v9 retains the feature registry from construction. Register the real
+  // factories before useMRT_TableInstance enables temporary manual modes.
+  const resolvedFeatures: MRT_FacetedFeatures<TData> = features ?? {
+    ...stockFeatures,
+    ...((enableColumnFilters || enableGlobalFilter || enableFilters) &&
+    !manualFiltering
+      ? { filteredRowModel: createFilteredRowModel(), filterFns }
+      : {}),
+    ...(enableSorting && !manualSorting
+      ? { sortedRowModel: createSortedRowModel(), sortFns }
+      : {}),
+    ...(enablePagination && !manualPagination
+      ? { paginatedRowModel: createPaginatedRowModel() }
+      : {}),
+    ...(enableExpanding || enableGrouping
+      ? { expandedRowModel: createExpandedRowModel() }
+      : {}),
+    ...(enableGrouping && !manualGrouping
+      ? {
+          groupedRowModel: createGroupedRowModel(),
+          aggregationFns,
+        }
+      : {}),
+    ...(enableFacetedValues
+      ? {
+          facetedRowModel: createFacetedRowModel<StockFeatures, TData>(),
+          facetedMinMaxValues: createFacetedMinMaxValues<
+            StockFeatures,
+            TData
+          >(),
+          facetedUniqueValues: createFacetedUniqueValues<
+            StockFeatures,
+            TData
+          >(),
+        }
+      : {}),
+  }
+
   return {
     aggregationFns,
     autoResetExpanded,
@@ -210,44 +268,41 @@ export const useMRT_TableOptions: <TData extends MRT_RowData>(
     enableSelectAll,
     enableSorting,
     enableStickyHeader,
+    enableSubRowSelection,
     enableTableFooter,
     enableTableHead,
     enableToolbarInternalActions,
     enableTopToolbar,
     filterFns,
     features: {
-      ...stockFeatures,
-      ...((enableColumnFilters || enableGlobalFilter || enableFilters) &&
-      !manualFiltering
-        ? { filteredRowModel: createFilteredRowModel(), filterFns }
-        : {}),
-      ...(enableSorting && !manualSorting
-        ? { sortedRowModel: createSortedRowModel(), sortFns }
-        : {}),
-      ...(enablePagination && !manualPagination
-        ? { paginatedRowModel: createPaginatedRowModel() }
-        : {}),
-      ...(enableExpanding || enableGrouping
-        ? { expandedRowModel: createExpandedRowModel() }
-        : {}),
-      ...(enableGrouping && !manualGrouping
-        ? {
-            groupedRowModel: createGroupedRowModel(),
-            aggregationFns,
-          }
-        : {}),
-      ...(enableFacetedValues
-        ? {
-            facetedRowModel: createFacetedRowModel(),
-            facetedMinMaxValues: createFacetedMinMaxValues(),
-            facetedUniqueValues: createFacetedUniqueValues(),
-          }
-        : {}),
+      ...resolvedFeatures,
+      ...(resolvedFeatures.facetedRowModel && {
+        facetedRowModel: skipSkeletonFacets(
+          resolvedFeatures.facetedRowModel,
+          () => ({ rows: [], flatRows: [], rowsById: {} }),
+        ),
+      }),
+      ...(resolvedFeatures.facetedMinMaxValues && {
+        facetedMinMaxValues: skipSkeletonFacets(
+          resolvedFeatures.facetedMinMaxValues,
+          () => undefined,
+        ),
+      }),
+      ...(resolvedFeatures.facetedUniqueValues && {
+        facetedUniqueValues: skipSkeletonFacets(
+          resolvedFeatures.facetedUniqueValues,
+          () => new Map<unknown, number>(),
+        ),
+      }),
     },
+    getIsRowExpanded,
+    getRowCanExpand,
+    getRowId,
     getSubRows: (row: TData) => (row as any)?.subRows,
     icons,
     layoutMode,
     localization,
+    manualExpanding,
     manualFiltering,
     manualGrouping,
     manualPagination,

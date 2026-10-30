@@ -4,6 +4,7 @@ import { memo, useEffect, useRef, useState } from 'react'
 
 import { Skeleton, TableTd, useDirection } from '@mantine/core'
 
+import { isSkeletonRow } from '../../utils/skeleton.utils'
 import { parseCSSVarId } from '../../utils/style.utils'
 import { parseFromValuesOrFunc } from '../../utils/utils'
 import { MRT_CopyButton } from '../buttons/MRT_CopyButton'
@@ -77,6 +78,7 @@ export const MRT_TableBodyCell = <TData extends MRT_RowData>({
     showSkeletons,
   } = state
   const { column, row } = cell
+  const isSkeleton = isSkeletonRow(row.original)
   const { columnDef } = column
   const { columnDefType } = columnDef
 
@@ -89,11 +91,16 @@ export const MRT_TableBodyCell = <TData extends MRT_RowData>({
     table,
   }
   const tableCellProps = {
-    ...parseFromValuesOrFunc(mantineTableBodyCellProps, args),
-    ...parseFromValuesOrFunc(columnDef.mantineTableBodyCellProps, args),
+    ...(isSkeleton && typeof mantineTableBodyCellProps === 'function'
+      ? undefined
+      : parseFromValuesOrFunc(mantineTableBodyCellProps, args)),
+    ...(isSkeleton && typeof columnDef.mantineTableBodyCellProps === 'function'
+      ? undefined
+      : parseFromValuesOrFunc(columnDef.mantineTableBodyCellProps, args)),
     ...rest,
   }
 
+  // Dedicated skeleton customization remains available while loading.
   const skeletonProps = parseFromValuesOrFunc(mantineSkeletonProps, args)
 
   const [skeletonWidth, setSkeletonWidth] = useState(100)
@@ -130,6 +137,7 @@ export const MRT_TableBodyCell = <TData extends MRT_RowData>({
     column.getIsPinned()
 
   const isEditable =
+    !isSkeleton &&
     !cell.getIsPlaceholder() &&
     parseFromValuesOrFunc(enableEditing, row) &&
     parseFromValuesOrFunc(columnDef.enableEditing, row) !== false
@@ -146,9 +154,10 @@ export const MRT_TableBodyCell = <TData extends MRT_RowData>({
     isEditable && createDisplayMode === 'row' && creatingRow?.id === row.id
 
   const showClickToCopyButton =
-    parseFromValuesOrFunc(enableClickToCopy, cell) ||
-    (parseFromValuesOrFunc(columnDef.enableClickToCopy, cell) &&
-      parseFromValuesOrFunc(columnDef.enableClickToCopy, cell) !== false)
+    !isSkeleton &&
+    (parseFromValuesOrFunc(enableClickToCopy, cell) ||
+      (parseFromValuesOrFunc(columnDef.enableClickToCopy, cell) &&
+        parseFromValuesOrFunc(columnDef.enableClickToCopy, cell) !== false))
 
   const handleDoubleClick = (event: MouseEvent<HTMLTableCellElement>) => {
     tableCellProps?.onDoubleClick?.(event)
@@ -200,6 +209,12 @@ export const MRT_TableBodyCell = <TData extends MRT_RowData>({
   }
 
   const renderCellContent = () => {
+    if (isSkeleton) {
+      return showSkeletons === false ? null : (
+        <Skeleton height={20} width={skeletonWidth} {...skeletonProps} />
+      )
+    }
+
     if (cell.getIsPlaceholder()) {
       return columnDef.PlaceholderCell?.({ cell, column, row, table }) ?? null
     }
