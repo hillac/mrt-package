@@ -322,12 +322,15 @@ export const useMRT_TableInstance = <TData extends MRT_RowData>(
   }
   statefulTableOptions.columns = columnDefsRef.current
 
+  const isPlaceholderData =
+    !!(statefulTableOptions.state.isLoading ||
+      statefulTableOptions.state.showSkeletons) &&
+    !statefulTableOptions.data.length
+
   // if loading, generate blank rows to show skeleton loaders
   statefulTableOptions.data = useMemo(
     () =>
-      (statefulTableOptions.state.isLoading ||
-        statefulTableOptions.state.showSkeletons) &&
-      !statefulTableOptions.data.length
+      isPlaceholderData
         ? [
             ...Array(
               Math.min(statefulTableOptions.state.pagination.pageSize, 20),
@@ -345,14 +348,20 @@ export const useMRT_TableInstance = <TData extends MRT_RowData>(
         : statefulTableOptions.data,
     [
       statefulTableOptions.data,
-      statefulTableOptions.state.isLoading,
-      statefulTableOptions.state.showSkeletons,
+      isPlaceholderData,
+      statefulTableOptions.state.pagination.pageSize,
     ],
   )
 
   const table = useTable(
     {
       ...(statefulTableOptions as any),
+      // Placeholder rows are not TData. Never pass their null fields to
+      // consumer filters, comparators or aggregators, or page them away.
+      manualFiltering: isPlaceholderData || statefulTableOptions.manualFiltering,
+      manualSorting: isPlaceholderData || statefulTableOptions.manualSorting,
+      manualGrouping: isPlaceholderData || statefulTableOptions.manualGrouping,
+      manualPagination: isPlaceholderData || statefulTableOptions.manualPagination,
       onPaginationChange:
         statefulTableOptions.onPaginationChange ?? setPagination,
       globalFilterFn: (globalFilterFn ?? 'fuzzy') as any,

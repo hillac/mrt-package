@@ -23,6 +23,12 @@ before(async () => {
           const table = useMantineReactTable({
             columns, data, state, enableGrouping: true,
             ...window.options,
+            ...(window.options.strictNumericCallbacks ? {
+              columns: [{ accessorKey: 'value', header: 'Value',
+                filterFn: (row, id, minimum) => Number(row.original.value.toFixed(7)) >= minimum,
+                sortFn: (left, right) => Number(left.original.value.toFixed(7)) - Number(right.original.value.toFixed(7)),
+              }],
+            } : {}),
             onColumnFiltersChange: updater => {
               window.filterWrites.push(typeof updater);
               setState(previous => ({...previous, columnFilters: typeof updater === 'function'
@@ -380,5 +386,37 @@ for (const variant of ['text', 'multi-select']) {
         pagination: { pageIndex: 1, pageSize: 1 },
       },
       true,
+    ));
+}
+
+for (const loadingFlag of ['isLoading', 'showSkeletons']) {
+  test(`${loadingFlag} placeholders bypass custom filters and sorts until data arrives`, () =>
+    withTable(
+      {
+        strictNumericCallbacks: true,
+        autoResetPageIndex: false,
+        initialState: {
+          columnFilters: [{ id: 'value', value: 0.5 }],
+          sorting: [{ id: 'value', desc: false }],
+          pagination: { pageIndex: 1, pageSize: 2 },
+        },
+      },
+      async (page) => {
+        await expect.poll(() => page.evaluate(() => window.snapshot().values)).toEqual([null, null]);
+        await page.evaluate(() => window.setData([
+          { value: 2.0000001 }, { value: 0.25 }, { value: 0.5 }, { value: 1 },
+        ]));
+        // Background loading with real data must still filter, sort and paginate.
+        await expect.poll(() => page.evaluate(() => window.snapshot().values)).toEqual([2.0000001]);
+        await page.evaluate(() => window.setState({}));
+        await expect.poll(() => page.evaluate(() => window.snapshot().values)).toEqual([2.0000001]);
+        await page.evaluate((flag) => {
+          window.setState({ [flag]: true });
+          window.setData([]);
+        }, loadingFlag);
+        await expect.poll(() => page.evaluate(() => window.snapshot().values)).toEqual([null, null]);
+        assert.deepEqual(await page.evaluate(() => window.filterWrites), []);
+      },
+      { [loadingFlag]: true },
     ));
 }

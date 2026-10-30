@@ -539,7 +539,7 @@ index 497e5c7..9199c67 100644
    }, [globalFilter])
  
 diff --git a/examples/react/mantine-react-table/src/mantine-react-table/hooks/useMRT_TableInstance.ts b/examples/react/mantine-react-table/src/mantine-react-table/hooks/useMRT_TableInstance.ts
-index d9f2390..ddbcbab 100644
+index d9f2390..e33e2b9 100644
 --- a/examples/react/mantine-react-table/src/mantine-react-table/hooks/useMRT_TableInstance.ts
 +++ b/examples/react/mantine-react-table/src/mantine-react-table/hooks/useMRT_TableInstance.ts
 @@ -1,4 +1,4 @@
@@ -582,10 +582,45 @@ index d9f2390..ddbcbab 100644
  
    // ---------------------------------------------------------------------------
    // MRT-only atoms — these slices aren't part of v9's `TableState` so they
-@@ -352,14 +353,15 @@ export const useMRT_TableInstance = <TData extends MRT_RowData>(
+@@ -321,12 +322,15 @@ export const useMRT_TableInstance = <TData extends MRT_RowData>(
+   }
+   statefulTableOptions.columns = columnDefsRef.current
+ 
++  const isPlaceholderData =
++    !!(statefulTableOptions.state.isLoading ||
++      statefulTableOptions.state.showSkeletons) &&
++    !statefulTableOptions.data.length
++
+   // if loading, generate blank rows to show skeleton loaders
+   statefulTableOptions.data = useMemo(
+     () =>
+-      (statefulTableOptions.state.isLoading ||
+-        statefulTableOptions.state.showSkeletons) &&
+-      !statefulTableOptions.data.length
++      isPlaceholderData
+         ? [
+             ...Array(
+               Math.min(statefulTableOptions.state.pagination.pageSize, 20),
+@@ -344,22 +348,29 @@ export const useMRT_TableInstance = <TData extends MRT_RowData>(
+         : statefulTableOptions.data,
+     [
+       statefulTableOptions.data,
+-      statefulTableOptions.state.isLoading,
+-      statefulTableOptions.state.showSkeletons,
++      isPlaceholderData,
++      statefulTableOptions.state.pagination.pageSize,
+     ],
+   )
+ 
    const table = useTable(
      {
        ...(statefulTableOptions as any),
++      // Placeholder rows are not TData. Never pass their null fields to
++      // consumer filters, comparators or aggregators, or page them away.
++      manualFiltering: isPlaceholderData || statefulTableOptions.manualFiltering,
++      manualSorting: isPlaceholderData || statefulTableOptions.manualSorting,
++      manualGrouping: isPlaceholderData || statefulTableOptions.manualGrouping,
++      manualPagination: isPlaceholderData || statefulTableOptions.manualPagination,
 +      onPaginationChange:
 +        statefulTableOptions.onPaginationChange ?? setPagination,
        globalFilterFn: (globalFilterFn ?? 'fuzzy') as any,
@@ -600,7 +635,7 @@ index d9f2390..ddbcbab 100644
        },
      },
      (state) => state, // default selector
-@@ -387,7 +389,13 @@ export const useMRT_TableInstance = <TData extends MRT_RowData>(
+@@ -387,7 +398,13 @@ export const useMRT_TableInstance = <TData extends MRT_RowData>(
      hoveredColumn,
      hoveredRow,
      isFullScreen,
