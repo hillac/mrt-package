@@ -11,7 +11,9 @@ const { chromium, expect } = require('@playwright/test');
 let browser;
 let bundle;
 before(async () => {
-  const component = process.env.MRT_RANGE_COMPONENT ?? resolve(__dirname, '../src/components/inputs/MRT_FilterRangeFields.tsx');
+  const component =
+    process.env.MRT_RANGE_COMPONENT ??
+    resolve(__dirname, '../src/components/inputs/MRT_FilterRangeFields.tsx');
   const result = await build({
     stdin: {
       contents: `
@@ -30,7 +32,7 @@ before(async () => {
               setExternal(value);
             },
           };
-          return <MRT_FilterRangeFields header={{ column }} table={{ options: { manualFiltering: false } }} />;
+          return <MRT_FilterRangeFields header={{ column }} table={{ options: { manualFiltering: window.manualFiltering } }} />;
         }
         window.unmount = () => root.unmount();
         root.render(<StrictMode><Harness /></StrictMode>);
@@ -42,40 +44,56 @@ before(async () => {
     write: false,
     jsx: 'automatic',
     nodePaths: (process.env.NODE_PATH ?? '').split(delimiter).filter(Boolean),
-    plugins: [{
-      name: 'input-shell',
-      setup(build) {
-        // Exercise the real range component and React lifecycle. Replace only
-        // the visual shell so this test needs no full table or CSS pipeline.
-        build.onResolve({ filter: /^(\.\/MRT_FilterTextInput|@mantine\/core|clsx|.*\.module\.css)$/ }, ({ path }) => ({ path, namespace: 'shell' }));
-        build.onLoad({ filter: /.*/, namespace: 'shell' }, ({ path }) => ({
-          loader: 'tsx',
-          resolveDir: process.cwd(),
-          contents: path === './MRT_FilterTextInput'
-            ? `export function MRT_FilterTextInput({ rangeFilterIndex, rangeFilterValue, onRangeFilterValueChange }) {
+    plugins: [
+      {
+        name: 'input-shell',
+        setup(build) {
+          // Exercise the real range component and React lifecycle. Replace only
+          // the visual shell so this test needs no full table or CSS pipeline.
+          build.onResolve(
+            {
+              filter:
+                /^(\.\/MRT_FilterTextInput|@mantine\/core|clsx|.*\.module\.css)$/,
+            },
+            ({ path }) => ({ path, namespace: 'shell' }),
+          );
+          build.onLoad({ filter: /.*/, namespace: 'shell' }, ({ path }) => ({
+            loader: 'tsx',
+            resolveDir: process.cwd(),
+            contents:
+              path === './MRT_FilterTextInput'
+                ? `export function MRT_FilterTextInput({ rangeFilterIndex, rangeFilterValue, onRangeFilterValueChange }) {
                 return <input aria-label={rangeFilterIndex === 0 ? 'Minimum' : 'Maximum'} value={rangeFilterValue ?? ''} onChange={event => onRangeFilterValueChange(event.target.value)} />;
               }`
-            : path === '@mantine/core'
-              ? 'export function Box({children}) { return <div>{children}</div> }'
-              : path === 'clsx'
-                ? 'export default (...values) => values.filter(Boolean).join(" ")'
-                : 'export default {}',
-        }));
+                : path === '@mantine/core'
+                  ? 'export function Box({children}) { return <div>{children}</div> }'
+                  : path === 'clsx'
+                    ? 'export default (...values) => values.filter(Boolean).join(" ")'
+                    : 'export default {}',
+          }));
+        },
       },
-    }],
+    ],
   });
   bundle = result.outputFiles[0].text;
   const executablePath = process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH;
-  browser = await chromium.launch(executablePath ? { executablePath } : undefined);
+  browser = await chromium.launch(
+    executablePath ? { executablePath } : undefined,
+  );
 });
-after(async () => { await browser?.close(); });
+after(async () => {
+  await browser?.close();
+});
 
-async function withRange(run) {
+async function withRange(run, manualFiltering = false) {
   const page = await browser.newPage();
   const errors = [];
-  page.on('pageerror', error => errors.push(error.message));
+  page.on('pageerror', (error) => errors.push(error.message));
   try {
     await page.setContent('<div id="root"></div>');
+    await page.evaluate((value) => {
+      window.manualFiltering = value;
+    }, manualFiltering);
     await page.addScriptTag({ content: bundle });
     const minimum = page.getByRole('textbox', { name: 'Minimum' });
     const maximum = page.getByRole('textbox', { name: 'Maximum' });
@@ -88,60 +106,75 @@ async function withRange(run) {
 }
 
 // These waits intentionally pass the component's 200ms debounce deadline.
-const settle = page => page.waitForTimeout(450);
-const writes = page => page.evaluate(() => window.writes);
+const settle = (page) => page.waitForTimeout(450);
+const writes = (page) => page.evaluate(() => window.writes);
 
-test('Strict Mode mount does not write controlled state', () => withRange(async page => {
-  await settle(page);
-  assert.deepEqual(await writes(page), []);
-}));
+test('Strict Mode mount does not write controlled state', () =>
+  withRange(async (page) => {
+    await settle(page);
+    assert.deepEqual(await writes(page), []);
+  }));
 
-test('both bounds commit together without mutating the frozen external tuple', () => withRange(async (page, minimum, maximum) => {
-  await minimum.fill('150');
-  await maximum.fill('250');
-  await settle(page);
-  assert.deepEqual(await writes(page), [['150', '250']]);
-}));
+test('both bounds commit together without mutating the frozen external tuple', () =>
+  withRange(async (page, minimum, maximum) => {
+    await minimum.fill('150');
+    await maximum.fill('250');
+    await settle(page);
+    assert.deepEqual(await writes(page), [['150', '250']]);
+  }));
 
-test('an equal external tuple preserves pending typing', () => withRange(async (page, minimum) => {
-  await minimum.fill('150');
-  await page.evaluate(() => window.setExternal(['100', '200']));
-  await expect(minimum).toHaveValue('150');
-  await settle(page);
-  assert.deepEqual(await writes(page), [['150', '200']]);
-}));
+test('an equal external tuple preserves pending typing', () =>
+  withRange(async (page, minimum) => {
+    await minimum.fill('150');
+    await page.evaluate(() => window.setExternal(['100', '200']));
+    await expect(minimum).toHaveValue('150');
+    await settle(page);
+    assert.deepEqual(await writes(page), [['150', '200']]);
+  }));
 
-test('external reset cancels the pending edit without echoing a write', () => withRange(async (page, minimum, maximum) => {
-  await minimum.fill('150');
-  await page.evaluate(() => window.setExternal(undefined));
-  await expect(minimum).toHaveValue('');
-  await expect(maximum).toHaveValue('');
-  await settle(page);
-  assert.deepEqual(await writes(page), []);
-}));
+test('external reset cancels the pending edit without echoing a write', () =>
+  withRange(async (page, minimum, maximum) => {
+    await minimum.fill('150');
+    await page.evaluate(() => window.setExternal(undefined));
+    await expect(minimum).toHaveValue('');
+    await expect(maximum).toHaveValue('');
+    await settle(page);
+    assert.deepEqual(await writes(page), []);
+  }));
 
-test('external replacement cancels the draft and supplies the next edit', () => withRange(async (page, minimum, maximum) => {
-  await minimum.fill('150');
-  await page.evaluate(() => window.setExternal(['300', '400']));
-  await expect(minimum).toHaveValue('300');
-  await expect(maximum).toHaveValue('400');
-  await settle(page);
-  assert.deepEqual(await writes(page), []);
-  await minimum.fill('350');
-  await settle(page);
-  assert.deepEqual(await writes(page), [['350', '400']]);
-}));
+test('external replacement cancels the draft and supplies the next edit', () =>
+  withRange(async (page, minimum, maximum) => {
+    await minimum.fill('150');
+    await page.evaluate(() => window.setExternal(['300', '400']));
+    await expect(minimum).toHaveValue('300');
+    await expect(maximum).toHaveValue('400');
+    await settle(page);
+    assert.deepEqual(await writes(page), []);
+    await minimum.fill('350');
+    await settle(page);
+    assert.deepEqual(await writes(page), [['350', '400']]);
+  }));
 
-test('clearing both bounds removes the filter', () => withRange(async (page, minimum, maximum) => {
-  await minimum.fill('');
-  await maximum.fill('');
-  await settle(page);
-  assert.deepEqual(await writes(page), [null]);
-}));
+test('clearing both bounds removes the filter', () =>
+  withRange(async (page, minimum, maximum) => {
+    await minimum.fill('');
+    await maximum.fill('');
+    await settle(page);
+    assert.deepEqual(await writes(page), [null]);
+  }));
 
-test('unmount cancels pending writes', () => withRange(async (page, minimum) => {
-  await minimum.fill('150');
-  await page.evaluate(() => window.unmount());
-  await settle(page);
-  assert.deepEqual(await writes(page), []);
-}));
+test('unmount cancels pending writes', () =>
+  withRange(async (page, minimum) => {
+    await minimum.fill('150');
+    await page.evaluate(() => window.unmount());
+    await settle(page);
+    assert.deepEqual(await writes(page), []);
+  }));
+
+test('manual filtering commits both bounds together after its longer debounce', () =>
+  withRange(async (page, minimum, maximum) => {
+    await minimum.fill('150');
+    await maximum.fill('250');
+    await settle(page);
+    assert.deepEqual(await writes(page), [['150', '250']]);
+  }, true));

@@ -7,7 +7,7 @@ output_path="${1:-${repository_root}/mantine-react-table-upstream.patch}"
 if [[ "${output_path}" != /* ]]; then
   output_path="${repository_root}/${output_path}"
 fi
-upstream_repository="https://github.com/TanStack/table.git"
+upstream_repository="${MRT_UPSTREAM_REPOSITORY:-https://github.com/TanStack/table.git}"
 upstream_path="examples/react/mantine-react-table/src/mantine-react-table"
 upstream_revision="$(node -p "require('${repository_root}/package.json').xUpstreamRevision")"
 work_dir="$(mktemp -d /tmp/mrt-upstream-diff.XXXXXX)"
@@ -36,7 +36,8 @@ git -C "${comparison_dir}" \
 find "${comparison_dir}" -mindepth 1 -maxdepth 1 ! -name .git -exec rm -rf {} +
 cp -R "${repository_root}/src/." "${comparison_dir}/"
 
-git -C "${comparison_dir}" diff --binary \
+git -C "${comparison_dir}" add -A
+git -C "${comparison_dir}" diff --cached --binary \
   --src-prefix="a/${upstream_path}/" \
   --dst-prefix="b/${upstream_path}/" \
   --output="${output_path}"

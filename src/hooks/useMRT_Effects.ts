@@ -88,9 +88,17 @@ export const useMRT_Effects = <TData extends MRT_RowData>(
   useEffect(() => {
     if (!getCanRankRows(table)) return
     if (globalFilter) {
-      table.setSorting([])
-    } else {
-      table.setSorting(() => appliedSort.current || [])
+      if (sorting.length) table.setSorting([])
+    } else if (
+      sorting.length !== appliedSort.current.length ||
+      sorting.some((sort, index) => {
+        const previous = appliedSort.current[index]
+        return sort.id !== previous?.id || sort.desc !== previous.desc
+      })
+    ) {
+      // Restoring the same sort on mount is not a user change. Consumers may
+      // reset pagination or fetch data whenever onSortingChange is called.
+      table.setSorting(appliedSort.current)
     }
   }, [globalFilter])
 

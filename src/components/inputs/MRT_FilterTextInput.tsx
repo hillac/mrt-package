@@ -1,6 +1,6 @@
 import clsx from 'clsx'
 
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 
 import {
   ActionIcon,
@@ -142,7 +142,9 @@ export const MRT_FilterTextInput = <TData extends MRT_RowData>({
     ],
   )
 
-  const isMounted = useRef(false)
+  const hasPendingEdit = useRef(false)
+  const tableFilterValue = column.getFilterValue()
+  const previousTableFilterValue = useRef(tableFilterValue)
 
   const [filterValue, setFilterValue] = useState<any>(() =>
     isMultiSelectFilter
@@ -161,11 +163,11 @@ export const MRT_FilterTextInput = <TData extends MRT_RowData>({
 
   // send debounced filterValue to table instance
   useEffect(() => {
-    if (!isMounted.current) return
-    if (onRangeFilterValueChange) return
+    if (!hasPendingEdit.current || onRangeFilterValueChange) return
+    hasPendingEdit.current = false
     if (isRangeFilter) {
       column.setFilterValue((old: [string, string]) => {
-        const newFilterValues = Array.isArray(old) ? old : ['', '']
+        const newFilterValues = Array.isArray(old) ? [...old] : ['', '']
         newFilterValues[rangeFilterIndex as number] =
           debouncedFilterValue as string
         return newFilterValues
@@ -176,15 +178,22 @@ export const MRT_FilterTextInput = <TData extends MRT_RowData>({
   }, [debouncedFilterValue])
 
   // receive table filter value and set it to local state
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (onRangeFilterValueChange) return
-    if (!isMounted.current) {
-      isMounted.current = true
-      return
-    }
-    const tableFilterValue = column.getFilterValue()
+    const previous = previousTableFilterValue.current
+    const unchanged =
+      Object.is(previous, tableFilterValue) ||
+      (Array.isArray(previous) &&
+        Array.isArray(tableFilterValue) &&
+        previous.length === tableFilterValue.length &&
+        previous.every((value, index) =>
+          Object.is(value, tableFilterValue[index]),
+        ))
+    if (unchanged) return
+    previousTableFilterValue.current = tableFilterValue
+    hasPendingEdit.current = false
     if (tableFilterValue === undefined) {
-      handleClear()
+      setFilterValue(isMultiSelectFilter ? [] : '')
     } else if (isRangeFilter && rangeFilterIndex !== undefined) {
       setFilterValue(
         ((tableFilterValue ?? ['', '']) as [string, string])[rangeFilterIndex],
@@ -192,9 +201,10 @@ export const MRT_FilterTextInput = <TData extends MRT_RowData>({
     } else {
       setFilterValue(tableFilterValue ?? '')
     }
-  }, [column.getFilterValue()])
+  }, [tableFilterValue])
 
   const handleClear = () => {
+    hasPendingEdit.current = false
     if (isMultiSelectFilter) {
       setFilterValue([])
       column.setFilterValue([])
@@ -205,7 +215,7 @@ export const MRT_FilterTextInput = <TData extends MRT_RowData>({
       }
       setFilterValue('')
       column.setFilterValue((old: [string | undefined, string | undefined]) => {
-        const newFilterValues = Array.isArray(old) ? old : ['', '']
+        const newFilterValues = Array.isArray(old) ? [...old] : ['', '']
         newFilterValues[rangeFilterIndex as number] = undefined
         return newFilterValues
       })
@@ -221,6 +231,7 @@ export const MRT_FilterTextInput = <TData extends MRT_RowData>({
   }
 
   const handleClearEmptyFilterChip = () => {
+    hasPendingEdit.current = false
     if (isMultiSelectFilter) {
       setFilterValue([])
       column.setFilterValue([])
@@ -237,10 +248,14 @@ export const MRT_FilterTextInput = <TData extends MRT_RowData>({
   const displayedFilterValue = onRangeFilterValueChange
     ? (rangeFilterValue ?? '')
     : filterValue
-  const handleFilterValueChange = (value: any) =>
-    onRangeFilterValueChange
-      ? onRangeFilterValueChange(value)
-      : setFilterValue(value)
+  const handleFilterValueChange = (value: any) => {
+    if (onRangeFilterValueChange) {
+      onRangeFilterValueChange(value)
+    } else {
+      hasPendingEdit.current = true
+      setFilterValue(value)
+    }
+  }
 
   const { className, ...commonProps } = {
     'aria-label': filterPlaceholder,
@@ -314,9 +329,15 @@ export const MRT_FilterTextInput = <TData extends MRT_RowData>({
         {...commonProps}
         searchable
         {...multiSelectProps}
+        clearButtonProps={{
+          'aria-hidden': false,
+          'aria-label': localization.clearFilter,
+          tabIndex: 0,
+          ...multiSelectProps.clearButtonProps,
+        }}
         className={clsx(className, multiSelectProps.className)}
         data={filterSelectOptions}
-        onChange={(value) => setFilterValue(value)}
+        onChange={handleFilterValueChange}
         ref={(node) => {
           if (node) {
             filterInputRefs.current[`${column.id}-${rangeFilterIndex ?? 0}`] =
@@ -385,7 +406,7 @@ export const MRT_FilterTextInput = <TData extends MRT_RowData>({
     return (
       <Autocomplete
         {...commonProps}
-        onChange={(value) => setFilterValue(value)}
+        onChange={handleFilterValueChange}
         rightSection={filterValue?.toString()?.length ? ClearButton : undefined}
         {...autoCompleteProps}
         className={clsx(className, autoCompleteProps.className)}

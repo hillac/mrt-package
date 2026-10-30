@@ -1,6 +1,6 @@
 import clsx from 'clsx'
 
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 
 import { ActionIcon, Collapse, Menu, TextInput, Tooltip } from '@mantine/core'
 import { useDebouncedValue } from '@mantine/hooks'
@@ -41,7 +41,7 @@ export const MRT_GlobalFilterTextInput = <TData extends MRT_RowData>({
     ...rest,
   }
 
-  const isMounted = useRef(false)
+  const hasPendingEdit = useRef(false)
   const [searchValue, setSearchValue] = useState(globalFilter ?? '')
 
   const [debouncedSearchValue] = useDebouncedValue(
@@ -50,23 +50,20 @@ export const MRT_GlobalFilterTextInput = <TData extends MRT_RowData>({
   )
 
   useEffect(() => {
+    if (!hasPendingEdit.current) return
+    hasPendingEdit.current = false
     setGlobalFilter(debouncedSearchValue || undefined)
   }, [debouncedSearchValue])
 
   const handleClear = () => {
+    hasPendingEdit.current = false
     setSearchValue('')
     setGlobalFilter(undefined)
   }
 
-  useEffect(() => {
-    if (isMounted.current) {
-      if (globalFilter === undefined) {
-        handleClear()
-      } else {
-        setSearchValue(globalFilter)
-      }
-    }
-    isMounted.current = true
+  useLayoutEffect(() => {
+    hasPendingEdit.current = false
+    setSearchValue(globalFilter ?? '')
   }, [globalFilter])
 
   return (
@@ -90,7 +87,10 @@ export const MRT_GlobalFilterTextInput = <TData extends MRT_RowData>({
         leftSection={!enableGlobalFilterModes && <IconSearch />}
         mt={0}
         mx={positionGlobalFilter !== 'left' ? 'mx' : undefined}
-        onChange={(event) => setSearchValue(event.target.value)}
+        onChange={(event) => {
+          hasPendingEdit.current = true
+          setSearchValue(event.target.value)
+        }}
         placeholder={localization.search}
         rightSection={
           <ActionIcon

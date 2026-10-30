@@ -34,9 +34,12 @@ const contains = <TData extends MRT_RowData>(
 
 contains.autoRemove = (val: any) => !val
 
-const getDateFilterTimestamp = (value: number | string) => {
+const dateOnlyPattern = /^(\d{4})-(\d{2})-(\d{2})$/
+
+const getDateFilterTimestamp = (value: Date | number | string) => {
+  if (value instanceof Date) return value.getTime()
   if (typeof value === 'string') {
-    const dateOnly = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value)
+    const dateOnly = dateOnlyPattern.exec(value)
     if (dateOnly) {
       return new Date(
         Number(dateOnly[1]),
@@ -98,9 +101,7 @@ const notEquals = <TData extends MRT_RowData>(
   row: Row<StockFeatures, TData>,
   id: string,
   filterValue: number | string,
-) =>
-  row.getValue<number | string>(id)?.toString().toLowerCase().trim() !==
-  filterValue.toString().toLowerCase().trim()
+) => !equals(row, id, filterValue)
 
 notEquals.autoRemove = (val: any) => !val
 
@@ -172,27 +173,47 @@ between.autoRemove = (val: any) => !val
 const betweenInclusive = <TData extends MRT_RowData>(
   row: Row<StockFeatures, TData>,
   id: string,
-  filterValues: [number | string, number | string],
+  filterValues: [
+    Date | number | string | null | undefined,
+    Date | number | string | null | undefined,
+  ],
 ) => {
+  const [lower, upper] = filterValues
   const rowValue = row.getValue<Date | number | string>(id)
   if (rowValue instanceof Date) {
-    const minimum = filterValues[0] === '' ? undefined : getDateFilterTimestamp(filterValues[0])
-    const maximum = filterValues[1] === '' ? undefined : getDateFilterTimestamp(filterValues[1])
-    const endOfMaximumDay = maximum === undefined ? undefined : maximum + 86_400_000 - 1
+    const minimum =
+      lower == null || lower === '' ? undefined : getDateFilterTimestamp(lower)
+    let maximum =
+      upper == null || upper === '' ? undefined : getDateFilterTimestamp(upper)
+    // Mantine emits date-only strings. Include that whole local calendar day,
+    // which can be 23 or 25 hours. Explicit timestamps remain exact bounds.
+    if (typeof upper === 'string' && dateOnlyPattern.test(upper)) {
+      const nextDay = new Date(getDateFilterTimestamp(upper))
+      nextDay.setDate(nextDay.getDate() + 1)
+      maximum = nextDay.getTime() - 1
+    }
     return (
       (minimum === undefined || rowValue.getTime() >= minimum) &&
-      (endOfMaximumDay === undefined || rowValue.getTime() <= endOfMaximumDay)
+      (maximum === undefined || rowValue.getTime() <= maximum)
     )
   }
 
   return (
-    ((['', undefined] as Array<any>).includes(filterValues[0]) ||
-      greaterThanOrEqualTo(row, id, filterValues[0])) &&
-    ((!isNaN(+filterValues[0]) &&
-      !isNaN(+filterValues[1]) &&
-      +filterValues[0] > +filterValues[1]) ||
-      (['', undefined] as Array<any>).includes(filterValues[1]) ||
-      lessThanOrEqualTo(row, id, filterValues[1]))
+    (lower == null ||
+      lower === '' ||
+      greaterThanOrEqualTo(
+        row,
+        id,
+        lower instanceof Date ? lower.getTime() : lower,
+      )) &&
+    (upper == null ||
+      upper === '' ||
+      (lower != null && !isNaN(+lower) && !isNaN(+upper) && +lower > +upper) ||
+      lessThanOrEqualTo(
+        row,
+        id,
+        upper instanceof Date ? upper.getTime() : upper,
+      ))
   )
 }
 

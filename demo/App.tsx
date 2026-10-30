@@ -16,10 +16,7 @@ import {
   Title,
 } from '@mantine/core'
 
-import {
-  MantineReactTable,
-  useMantineReactTable,
-} from '../src'
+import { MantineReactTable, useMantineReactTable } from '../src'
 import { employees, queryEmployees } from './mockServer'
 import { readUrlState, writeUrlState } from './urlState'
 import type { Employee } from './mockServer'
@@ -36,7 +33,11 @@ const infinitePageSize = 40
 const parseDayMonthYear = (value: string) => {
   const match = /^(\d{1,2})\/(\d{1,2})\/(\d{4})$/.exec(value)
   if (!match) return null
-  const date = new Date(Number(match[3]), Number(match[2]) - 1, Number(match[1]))
+  const date = new Date(
+    Number(match[3]),
+    Number(match[2]) - 1,
+    Number(match[1]),
+  )
   return date.getFullYear() === Number(match[3]) &&
     date.getMonth() === Number(match[2]) - 1 &&
     date.getDate() === Number(match[1])
@@ -46,12 +47,16 @@ const parseDayMonthYear = (value: string) => {
 
 export function App() {
   const [dataMode, setDataMode] = useState<'client' | 'server'>(
-    initialUrlState.navigation === 'infinite' ? 'server' : initialUrlState.dataMode,
+    initialUrlState.navigation === 'infinite'
+      ? 'server'
+      : initialUrlState.dataMode,
   )
   const [navigation, setNavigation] = useState<'infinite' | 'pagination'>(
     initialUrlState.navigation,
   )
-  const [urlStateEnabled, setUrlStateEnabled] = useState(initialUrlState.urlStateEnabled)
+  const [urlStateEnabled, setUrlStateEnabled] = useState(
+    initialUrlState.urlStateEnabled,
+  )
   const [forceLoading, setForceLoading] = useState(false)
   const [forceError, setForceError] = useState(false)
   const [latency, setLatency] = useState(500)
@@ -59,8 +64,12 @@ export function App() {
     initialUrlState.columnFilters,
   )
   const [globalFilter, setGlobalFilter] = useState(initialUrlState.globalFilter)
-  const [pagination, setPagination] = useState<MRT_PaginationState>(initialUrlState.pagination)
-  const [sorting, setSorting] = useState<MRT_SortingState>(initialUrlState.sorting)
+  const [pagination, setPagination] = useState<MRT_PaginationState>(
+    initialUrlState.pagination,
+  )
+  const [sorting, setSorting] = useState<MRT_SortingState>(
+    initialUrlState.sorting,
+  )
   const [infinitePage, setInfinitePage] = useState(0)
   const [rows, setRows] = useState<Employee[]>([])
   const [rowCount, setRowCount] = useState(0)
@@ -75,9 +84,13 @@ export function App() {
       { accessorKey: 'name', header: 'Name', size: 180 },
       {
         accessorKey: 'department',
-        filterVariant: 'select',
+        filterVariant: 'multi-select',
         header: 'Department',
-        mantineFilterSelectProps: { data: ['Engineering', 'Finance', 'Legal', 'Operations'] },
+        mantineFilterMultiSelectProps: {
+          data: ['Engineering', 'Finance', 'Legal', 'Operations'],
+          clearButtonProps: { 'aria-label': 'Clear departments' },
+          withScrollArea: false,
+        },
       },
       {
         accessorKey: 'salary',
@@ -105,7 +118,13 @@ export function App() {
     [],
   )
 
-  const queryKey = JSON.stringify({ columnFilters, dataMode, globalFilter, navigation, sorting })
+  const queryKey = JSON.stringify({
+    columnFilters,
+    dataMode,
+    globalFilter,
+    navigation,
+    sorting,
+  })
 
   useEffect(() => {
     if (navigation !== 'infinite') return
@@ -123,7 +142,15 @@ export function App() {
       sorting,
       urlStateEnabled,
     })
-  }, [columnFilters, dataMode, globalFilter, navigation, pagination, sorting, urlStateEnabled])
+  }, [
+    columnFilters,
+    dataMode,
+    globalFilter,
+    navigation,
+    pagination,
+    sorting,
+    urlStateEnabled,
+  ])
 
   useEffect(() => {
     const currentRequest = ++requestId.current
@@ -149,7 +176,10 @@ export function App() {
         if (currentRequest !== requestId.current) return
         setRows((currentRows) =>
           navigation === 'infinite' && infinitePage > 0
-            ? [...currentRows, ...response.rows]
+            ? [
+                ...currentRows.slice(0, infinitePage * infinitePageSize),
+                ...response.rows,
+              ]
             : response.rows,
         )
         setRowCount(response.rowCount)
@@ -200,9 +230,14 @@ export function App() {
     positionToolbarAlertBanner: 'top',
     mantineTableContainerProps: {
       onScroll: (event) => {
-        if (navigation !== 'infinite' || isFetching || rows.length >= rowCount) return
+        if (navigation !== 'infinite' || isFetching || rows.length >= rowCount)
+          return
         const container = event.currentTarget
-        const nearBottom = container.scrollHeight - container.scrollTop - container.clientHeight < 160
+        const nearBottom =
+          container.scrollHeight -
+            container.scrollTop -
+            container.clientHeight <
+          160
         if (nearBottom) setInfinitePage((page) => page + 1)
       },
       style: { maxHeight: navigation === 'infinite' ? 520 : undefined },
@@ -211,12 +246,15 @@ export function App() {
       color: 'red',
       children: (
         <Group>
-          <Text size="sm">{error?.message ?? 'The mock server rejected the request'}</Text>
+          <Text size="sm">
+            {error?.message ?? 'The mock server rejected the request'}
+          </Text>
           <Button
             size="compact-xs"
             variant="light"
             onClick={() => {
               setForceError(false)
+              setInfinitePage(0)
               setRequestVersion((version) => version + 1)
             }}
           >
@@ -236,7 +274,7 @@ export function App() {
     },
     initialState: {
       density: 'xs',
-      pagination: initialUrlState.pagination,
+      pagination: { pageIndex: 0, pageSize: 20 },
       showColumnFilters: true,
     },
   })
@@ -254,9 +292,14 @@ export function App() {
         <Group h="100%" px="lg" justify="space-between">
           <div>
             <Title order={2}>Mantine React Table playground</Title>
-            <Text c="dimmed" size="sm">Async client and mock-server behaviour</Text>
+            <Text c="dimmed" size="sm">
+              Async client and mock-server behaviour
+            </Text>
           </div>
-          <Badge data-testid="table-status" color={error ? 'red' : showLoading ? 'blue' : 'green'}>
+          <Badge
+            data-testid="table-status"
+            color={error ? 'red' : showLoading ? 'blue' : 'green'}
+          >
             {status}
           </Badge>
         </Group>
@@ -267,19 +310,29 @@ export function App() {
             <Paper withBorder p="md">
               <SimpleGrid cols={{ base: 1, sm: 2, lg: 3 }} spacing="lg">
                 <Stack gap={6}>
-                  <Text fw={600} size="sm">Data processing</Text>
+                  <Text fw={600} size="sm">
+                    Data processing
+                  </Text>
                   <SegmentedControl
                     aria-label="Data processing"
                     data={[
-                      { label: 'Client', value: 'client' },
+                      {
+                        label: 'Client',
+                        value: 'client',
+                        disabled: navigation === 'infinite',
+                      },
                       { label: 'Mock server', value: 'server' },
                     ]}
                     value={dataMode}
-                    onChange={(value) => setDataMode(value as 'client' | 'server')}
+                    onChange={(value) =>
+                      setDataMode(value as 'client' | 'server')
+                    }
                   />
                 </Stack>
                 <Stack gap={6}>
-                  <Text fw={600} size="sm">Navigation</Text>
+                  <Text fw={600} size="sm">
+                    Navigation
+                  </Text>
                   <SegmentedControl
                     aria-label="Navigation"
                     data={[
@@ -295,7 +348,9 @@ export function App() {
                   />
                 </Stack>
                 <Stack gap={6}>
-                  <Text fw={600} size="sm">Mock latency</Text>
+                  <Text fw={600} size="sm">
+                    Mock latency
+                  </Text>
                   <SegmentedControl
                     aria-label="Mock latency"
                     data={[
@@ -310,25 +365,31 @@ export function App() {
                 <Switch
                   label="Store filter, pagination and sort state in the URL"
                   checked={urlStateEnabled}
-                  onChange={(event) => setUrlStateEnabled(event.currentTarget.checked)}
+                  onChange={(event) =>
+                    setUrlStateEnabled(event.currentTarget.checked)
+                  }
                 />
                 <Switch
                   label="Force loading state"
                   checked={forceLoading}
-                  onChange={(event) => setForceLoading(event.currentTarget.checked)}
+                  onChange={(event) =>
+                    setForceLoading(event.currentTarget.checked)
+                  }
                 />
                 <Switch
                   label="Force error response"
                   checked={forceError}
-                  onChange={(event) => setForceError(event.currentTarget.checked)}
+                  onChange={(event) =>
+                    setForceError(event.currentTarget.checked)
+                  }
                 />
               </SimpleGrid>
             </Paper>
 
             {navigation === 'infinite' && (
               <Alert color="blue" variant="light">
-                Infinite scrolling uses the mock server so filtering and sorting remain correct across
-                unloaded rows.
+                Infinite scrolling uses the mock server so filtering and sorting
+                remain correct across unloaded rows.
               </Alert>
             )}
 

@@ -34,7 +34,7 @@
     "demo": "vite --config demo/vite.config.ts",
     "demo:build": "vite build --config demo/vite.config.ts",
     "test": "pnpm run test:unit && pnpm run test:e2e",
-    "test:unit": "node --test tests/filter-range.test.cjs",
+    "test:unit": "node --test tests/*.test.cjs",
     "test:e2e": "playwright test",
     "typecheck": "tsc --noEmit && tsc --noEmit -p demo/tsconfig.json",
     "validate": "pnpm run typecheck && pnpm run build && pnpm run demo:build && pnpm run test:unit && pnpm run test:e2e && ./scripts/validate-package.sh"

@@ -1,4 +1,4 @@
-import { useMemo, useRef } from 'react'
+import { useMemo, useRef, useState } from 'react'
 
 import { useCreateAtom, useSelector } from '@tanstack/react-store'
 import { useTable } from '@tanstack/react-table'
@@ -53,11 +53,12 @@ import type {
  * state, refs, and helpers. State management is built on top of TanStack
  * Store atoms (`useCreateAtom` from `@tanstack/react-store`):
  *
- * - **TanStack-aware slices** (`columnOrder`, `columnResizing`, `grouping`,
- *   `pagination`) are passed via the `atoms` option on `useTable`. Library
- *   writes (e.g. `table.setSorting(...)`, `table.firstPage()`) flow directly
+ * - **TanStack-aware slices** (`columnOrder`, `columnResizing`, `grouping`)
+ *   are passed via the `atoms` option on `useTable`. Library writes flow directly
  *   through these atoms, and they're automatically tracked in
  *   `table.state` by the v9 store.
+ * - Pagination uses `state` and `onPaginationChange`, with local React state
+ *   as the fallback when the consumer does not control it.
  * - **MRT-only slices** (`density`, `isFullScreen`, `creatingRow`,
  *   `editingCell`, `editingRow`, `draggingColumn`, `draggingRow`,
  *   `hoveredColumn`, `hoveredRow`, `globalFilterFn`, `columnFilterFns`,
@@ -115,7 +116,8 @@ export const useMRT_TableInstance = <TData extends MRT_RowData>(
   const groupingAtom = useCreateAtom<MRT_GroupingState>(
     initialState.grouping ?? [],
   )
-  const paginationAtom = useCreateAtom<MRT_PaginationState>(
+  // An external atom would take precedence over controlled state.pagination.
+  const [pagination, setPagination] = useState<MRT_PaginationState>(
     initialState?.pagination ?? { pageIndex: 0, pageSize: 10 },
   )
 
@@ -125,7 +127,6 @@ export const useMRT_TableInstance = <TData extends MRT_RowData>(
   const columnOrder = useSelector(columnOrderAtom)
   const columnResizing = useSelector(columnResizingAtom)
   const grouping = useSelector(groupingAtom)
-  const pagination = useSelector(paginationAtom)
 
   // ---------------------------------------------------------------------------
   // MRT-only atoms — these slices aren't part of v9's `TableState` so they
@@ -352,14 +353,15 @@ export const useMRT_TableInstance = <TData extends MRT_RowData>(
   const table = useTable(
     {
       ...(statefulTableOptions as any),
+      onPaginationChange:
+        statefulTableOptions.onPaginationChange ?? setPagination,
       globalFilterFn: (globalFilterFn ?? 'fuzzy') as any,
       // Hand TanStack-aware slices over to our external atoms — library writes
-      // (e.g. `table.setPageIndex(...)`, drag-resize) flow straight into them.
+      // (e.g. drag-resize) flow straight into them.
       atoms: {
         columnOrder: columnOrderAtom,
         columnResizing: columnResizingAtom,
         grouping: groupingAtom,
-        pagination: paginationAtom,
       },
     },
     (state) => state, // default selector
