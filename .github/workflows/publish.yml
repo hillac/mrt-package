@@ -27,7 +27,7 @@ concurrency:
 
 env:
   PACKAGE_NAME: '@hillac/mantine-react-table'
-  PNPM_VERSION: 12.6.0
+  PNPM_VERSION: 12.21.0
 
 jobs:
   publish:

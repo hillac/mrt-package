@@ -4,9 +4,9 @@
   "description": "Mantine React Table for Mantine 9 and TanStack Table 9",
   "license": "MIT",
   "type": "module",
-  "packageManager": "pnpm@12.6.0",
+  "packageManager": "pnpm@12.21.0",
   "engines": {
-    "node": ">=24 <25"
+    "node": ">=24"
   },
   "sideEffects": [
     "*.css"
